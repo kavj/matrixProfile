@@ -9,46 +9,63 @@ void shuffle(double* i){
 
 }
 
-// scalar code for windowed dot product, m terms are considered during the first loop, m-1 terms are updated during the second
-// Since SIMD versions require some kind of loop peeling, they should be written separately. Otherwise this could be refactored later,
-// but it actually expresses the logic quite well. Do not merge it with other functions.
-static inline void windot(const double* T1, const double* T2, double* d, const int m){
-    T1 = __builtin_assume_aligned(T1,64);
-    d  = __builtin_assume_aligned(d,64);
+/* Computes dot products sum(a[i:i+winLen-1],b[i:i+winLen-1]) for 0 <= i < winLen 
+ * Accumulating to a different variable *//
+
+/* This accumulates a series of dot products over a fixed window length. */
+void windot(const double* a, const double* b, double* d, const int winLen){
     double accum = 0;
-    for(int i = m-1; i >= 0; i--){
-        accum += T1[i]*T2[i];
-        d[i] = accum;
+    for(int i = winLen-1; i >= 0; i--){
+        accum += a[i]*b[i];
+        d[i]   = accum;
     }
-    __builtin_prefetch(&T1[m]);
-    __builtin_prefetch(&T2[m]);
     accum = 0;
-    for(int i = m; i < 2*m; i++){
-        accum += T1[i]*T2[i];
-        d[i-m+1] += accum;
+    for(int i = 1; i < winLen; i++){
+        accum += a[i+winLen]*b[i+winLen];
+        d[i]  += accum;
     }
 }
 
-static int isunaligned(void* v){
+static inline double onedot(const double* a, const double* b, const int winLen){
+    double accum = 0;
+    for(int i = 0; i < m; i++){
+        accum += a[i]*b[i];
+    }
+    return accum;
+}
+
+/*
+static int aligned_256(void* v){
     return (~((uintptr_t) v) & 0x40);
 }
 
-static void winsum(const double* T, double* d, const int m){
+static int aligned_512(void* v){
+    return 0;
+}
+
+static int aligned_128(void* v){
+    return 0;
+}*/
+
+
+/* This can be used to compute a windowed mean or other weighting */
+static void winscaledsum(const double* a, double* d, const int m){
     double accum = 0;
-    for(int i = m-1; i >= 0; i--){
+    for(int i = winLen-1; i >= 0; i--){
         accum += T[i];
         d[i] = accum;
     }
     accum = 0;
-    for(int i = m; i < 2*m; i++){
-        accum += T[i];
-        d[i]  += accum;
+    for(int i = 1; i < m; i++){
+        accum += a[i+winLen];
+        d[i] = (d[i]+accum)/winLen;
     }
 }
 
 
 /* This should be updated to use masked writebacks  */
-static inline void minwb(const double* d, double* mp, int* mpi, const int offset, const int m){
+static inline void minwb(const double* d, double* mp, int* mpi, const int base, const int m){
+    
     for(int i = 0; i < m; i++){
         if(d[i] < mp[i]){
             mp[i] = d[i];
@@ -57,29 +74,16 @@ static inline void minwb(const double* d, double* mp, int* mpi, const int offset
     }
 }
 
-static inline double onedot(const double* T1, const double* T2, const int m){
-    double d = 0;
-    for(int i = 0; i < m; i++){
-        d += T1[i]*T2[i];
-    }
-    return d;
-}
-
-void winmean(const double* T, double* d, const int m, const int n){
-    for(int i = 0; i < n; i+=m){
-        windowSum(T,&d[i],m);
-        //test if prefetching is needed later
-        for(int j = i; j < i+m; j++){
-            d[j] /= m;
-        }
-    }
-}
-
+/* should use welford's method */
 void winstd(const double* T, double* d, const int m){
     
 }
 
-void  matrixProfile(const double* T, double* mp, const double n, const double m){
+int tsJoin(const double* a, double* mp, int n, int ssLen){
+
+}
+
+void  matrixProfile(const double* T, double* mp,int n, int  m){
     double* d;
     int err = posix_memalign((void**)&d,64,2*m);
     d = __builtin_assume_aligned(d,64);
