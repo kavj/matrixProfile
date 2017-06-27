@@ -1,6 +1,8 @@
 //#include<ctgmath>
 #include<algorithm>
+#include<math.h>
 #define err 0x40
+#define chunkSz 4096  // We have to keep several arrays in L2
 
 struct mpStats{
     const double* T;
@@ -10,21 +12,21 @@ struct mpStats{
     int m;
 };
 
-typedef tsdesc mpStats;
+typedef struct mpStats tsdesc;
 
 
 /* allocate memory and setup structures */
 /* still in debate whether I should overload this for single precision. I need to test stability first */
 tsdesc* sc_init(const double* T, int n, int m){
-    tsdesc* t = malloc(sizeof(tsdesc));
+    tsdesc* t = (tsdesc*)malloc(sizeof(tsdesc));
     if(t == NULL){
         goto done;
     }
     t->T = T;
     t->n = n;
     t->m = m;
-    t->mu = malloc(n*sizeof(double));
-    t->sig = malloc(n*sizeof(double));
+    t->mu = (double*)malloc(n*sizeof(double));
+    t->sig = (double*)malloc(n*sizeof(double));
     if(t->mu == NULL || t->sig == NULL){
         free(t->mu);
         free(t->sig);
@@ -40,22 +42,36 @@ static inline int alignedSeqLen(int n, int m){
 }
 
 
+/* This may use a low quality random number generator, so it should be replaced with something more robust*/
+int* buildIndex(int n){
+    int* index = (int*) malloc(n*sizeof(int));
+    if(index == NULL){ goto done;};
+    for(int i = 0; i < n; i++){
+        index[i] = i;
+    }
+    shuffle(index,index+n);
+    done:
+    return index;
+}
+
 
 /* This is based on Higham's approach to the rolling mean and variance, which I think is based on Welford's method for online variance
  * It's easy enough to simultaneously accumulate the means on a pass through the data, so I went ahead and did that. winmean only computes means. 
  * It's orphaned for now
  */
 int winmeansig(const double* T, double* mu, double* sig, int n, int m){
-    double p = 0;
+    double p = T[0];
     double M = T[0];
     double Q = 0;
     int alignedLen = alignedSeqLen(n,m);
     if(alignedLen < m){
         return err;
     }
-    for(int i = 0; i < m; i++){
+    for(int i = 1; i < m; i++){
         p += T[i];
-        
+        double t = T[i] - M;
+        Q += (i-1)*t*t/i;
+        M += t/i;
     }
     mu[0] = p/m;
     for(int i = m; i < alignedLen; i += m){
@@ -64,24 +80,25 @@ int winmeansig(const double* T, double* mu, double* sig, int n, int m){
         for(int j = i; i < j+m; j++){
             q -= T[j-m];
             p += T[j];
+            double t = T[i] - M;
             mu[j] = (p + q)/m;
-            Q += (i-1)*(T[i]-M)/i;
-            M += (T[i] - M)/i;
+            Q += (i-1)*t*t/i;
+            M += t/i;
             sig[i] = sqrt(M/i);
-            
         }
     }
+    double q = p;
+    p = 0;
     for(int i = alignedLen; i < n - m + 1; i++){
-
+        q -= T[i-m];
+        p += T[i];
+        double t = T[i] - M;
+        mu[i] = (p + q)/m;
+        Q += (i-1)*t*t/i;
+        sig[i] = sqrt(M/i);
     }
     return 0;
 }
-
-/*
- * manually inline this
-static void builtinShuffle(int* x,int n){
-    shuffle(x,x+n);
-}*/
 
 
 int iterCnt(int* x, int xOffs, int n, int m, double perc){
@@ -101,31 +118,7 @@ int iterCnt(int* x, int xOffs, int n, int m, double perc){
     return k;
 }
 
-/*
- * manually inline this
-static void sortIndex(int* x, int offs, int k){
-    sort(x+offs,x+offs+k);
-}*/
 
-
-/*
-void abwindot(const tsdesc* a, const tsdesc* b, int n, int m, int lag){
-    double x = 0;
-    int alignedLen = alignedSeqLen(n-lag,m);
-    for(int j = 0; j < m; j++){
-        x += a->T[j];
-    } 
-    for(int i = m; i < alignedLen; i += m){
-        double y = x;
-        x = 0; 
-        for(int j = i; j < i + m; j++){
-            y -= a->T[j-m] * b->T[j-m];
-            x += a->T[j]   * b->T[j];
-            double z = (x + y - a->mu[j]*b->mu[j])/(a->sig[j]*b->sig[j]);
-   
-        }
-    }
-}*/
 
 static inline void updateMP(double* mp, int* mpI, double z, int j, int k){
     if(z < mp[j]){
@@ -134,19 +127,14 @@ static inline void updateMP(double* mp, int* mpI, double z, int j, int k){
     }
 }
 
-/* Since this algorithm doesn't lend itself to vectorization due to unknown alignment, conditional writebacks with different sized operands, etc, I opted to eliminate as many
- *  memory references as possible 
- *  We can eliminate the branching via a switch from int to long*/
-
-static void sjoinComputePartial(const double* T, const double* mu, const double* sig, double* mp, double* mpi, const int cycles, const int m, const int lag){
+/* This should always take aligned commands */
+static void sjoincomp(const double* T, const double* mu, const double* sig,  double* mp, int* mpI, int lag, int n, int m){
     double x = 0;
-    int alignedLen = alignedSeqLen(n-lag,m);
     for(int j = 0; j < m; j++){
         x += T[j]*T[j+lag];
     }
-    updateMP(mp,mpI,(x - mu[0]*mu[lag])/(sig[0]*sig[lag]));
-
-    for(int i = m; i < alignedLen; i+=m){
+    updateMP(mp,mpI,(x - mu[0]*mu[lag])/(sig[0]*sig[lag]),0,lag);
+    for(int i = m; i < n; i+=m){
         double y = x;
         x = 0;
         for(int j = i; j < i+m; j++){
@@ -160,12 +148,4 @@ static void sjoinComputePartial(const double* T, const double* mu, const double*
     }
 }
 
-// Replace arguments with a simpler struct that can be unpacked here. R
-void sjoin(const double* T, double* mu, double* sig,  double* mp, int* mpI, int n, int m, int lag){
-    double x = 0;
-    int alignedLen = alignedSeqLen(n-lag,m);
-    sjoinComputePartial(T,mu,sig,mp,mpi,alignedLen/m,m,lag);
-    //if(alignedLen < n-m+1){
-        sjoinComputePartial(&T[n-m],mu,sig,mp,mpi,2,lag);
-    }
-}
+
