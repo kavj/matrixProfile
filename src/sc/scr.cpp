@@ -1,6 +1,6 @@
 //#include<ctgmath>
 #include<algorithm>
-#include<math.h>
+#include<cmath>
 #define err 0x40
 #define chunkSz 4096  // We have to keep several arrays in L2
 
@@ -19,85 +19,35 @@ typedef struct mpStats tsdesc;
 /* still in debate whether I should overload this for single precision. I need to test stability first */
 tsdesc* sc_init(const double* T, int n, int m){
     tsdesc* t = (tsdesc*)malloc(sizeof(tsdesc));
-    if(t == NULL){
-        goto done;
+    if(t != NULL){
+        t->T = T;
+        t->n = n;
+        t->m = m;
+        t->mu = (double*)malloc(n*sizeof(double));
+        t->sig = (double*)malloc(n*sizeof(double));
+        if(t->mu == NULL || t->sig == NULL){
+            free(t->mu);
+            free(t->sig);
+            free(t);
+            t = NULL;
+        }
     }
-    t->T = T;
-    t->n = n;
-    t->m = m;
-    t->mu = (double*)malloc(n*sizeof(double));
-    t->sig = (double*)malloc(n*sizeof(double));
-    if(t->mu == NULL || t->sig == NULL){
-        free(t->mu);
-        free(t->sig);
-        free(t);
-        t = NULL;
-    }
-    done:
     return t;
 }
 
-static inline int alignedSeqLen(int n, int m){
+/*static inline int alignedSeqLen(int n, int m){
     return (n - m + 1) - (n - m + 1) % m;
-}
+}*/
 
 
 /* This may use a low quality random number generator, so it should be replaced with something more robust*/
+/* n is the upper bound of the range of values to be indexed*/
 int* buildIndex(int n){
-    int* index = (int*) malloc(n*sizeof(int));
-    if(index == NULL){ goto done;};
     for(int i = 0; i < n; i++){
-        index[i] = i;
-    }
-    shuffle(index,index+n);
-    done:
-    return index;
-}
-
-
-/* This is based on Higham's approach to the rolling mean and variance, which I think is based on Welford's method for online variance
- * It's easy enough to simultaneously accumulate the means on a pass through the data, so I went ahead and did that. winmean only computes means. 
- * It's orphaned for now
- */
-int winmeansig(const double* T, double* mu, double* sig, int n, int m){
-    double p = T[0];
-    double M = T[0];
-    double Q = 0;
-    int alignedLen = alignedSeqLen(n,m);
-    if(alignedLen < m){
-        return err;
-    }
-    for(int i = 1; i < m; i++){
-        p += T[i];
-        double t = T[i] - M;
-        Q += (i-1)*t*t/i;
-        M += t/i;
-    }
-    mu[0] = p/m;
-    for(int i = m; i < alignedLen; i += m){
-        double q = p;
-        p = 0; 
-        for(int j = i; i < j+m; j++){
-            q -= T[j-m];
-            p += T[j];
-            double t = T[i] - M;
-            mu[j] = (p + q)/m;
-            Q += (i-1)*t*t/i;
-            M += t/i;
-            sig[i] = sqrt(M/i);
+            index[i] = i;
         }
-    }
-    double q = p;
-    p = 0;
-    for(int i = alignedLen; i < n - m + 1; i++){
-        q -= T[i-m];
-        p += T[i];
-        double t = T[i] - M;
-        mu[i] = (p + q)/m;
-        Q += (i-1)*t*t/i;
-        sig[i] = sqrt(M/i);
-    }
-    return 0;
+    shuffle(index,index+n);
+    return index;
 }
 
 
@@ -118,14 +68,40 @@ int iterCnt(int* x, int xOffs, int n, int m, double perc){
     return k;
 }
 
-
-
-static inline void updateMP(double* mp, int* mpI, double z, int j, int k){
-    if(z < mp[j]){
-        mp[j] = z;
-        mpI[j] = k;
+/* This is based on Higham's approach to the rolling mean and variance, which I think is based on Welford's method for online variance
+ * It's easy enough to simultaneously accumulate the means on a pass through the data, so I went ahead and did that. winmean only computes means. 
+ * It's orphaned for now
+ */
+int winmeansig(const double* T, double* mu, double* sig, int n, int m){
+    double p = T[0];
+    double M = T[0];
+    double Q = 0;
+    for(int i = 1; i < m; i++){
+        p += T[i];
+        double t = T[i] - M;
+        Q += (i-1)*t*t/i;
+        M += t/i;
     }
+    mu[0] = p/m;
+    for(int i = m; i < alignedLen; i += m){
+        if(i > n - m){
+            m = n - i;
+        }
+        double q = p;
+        p = 0; 
+        for(int j = i; i < j+m; j++){
+            q -= T[j-m];
+            p += T[j];
+            double t = T[i] - M;
+            mu[j] = (p + q)/m;
+            Q += (i-1)*t*t/i;
+            M += t/i;
+            sig[i] = sqrt(M/i);
+        }
+    }
+    return 0;
 }
+
 
 /* This should always take aligned commands */
 static void sjoincomp(const double* T, const double* mu, const double* sig,  double* mp, int* mpI, int lag, int n, int m){
@@ -133,19 +109,34 @@ static void sjoincomp(const double* T, const double* mu, const double* sig,  dou
     for(int j = 0; j < m; j++){
         x += T[j]*T[j+lag];
     }
-    updateMP(mp,mpI,(x - mu[0]*mu[lag])/(sig[0]*sig[lag]),0,lag);
+    double z = (x-mu[0]*mu[lag])/(sig[0]*sig[lag]);
+    if(z < mp[0]){
+        mp[0] = z;
+        mpI[0] = lag;
+    }
+    if(z < mp[lag]){
+        mp[lag] = z;
+        mpI[lag] = 0;
+    }
     for(int i = m; i < n; i+=m){
+        if(i > n - m){
+            m = n - i;
+        }
         double y = x;
         x = 0;
         for(int j = i; j < i+m; j++){
             int k = j + lag;
             y -= T[j-m]*T[k-m];
             x += T[j]  *T[k];
-            double z = (x + y - mu[j]*mu[k])/(sig[j]*sig[k]);
-            updateMP(mp,mpI,z,j-m,k);
-            updateMP(mp,mpI,z,k-m,j);
+            z = (x + y - mu[j]*mu[k])/(sig[j]*sig[k]);
+            if(z < mp[j-m]){
+                mp[j-m] = z;
+                mpI[j-m] = j-m+lag;
+            }
+            if(z < mp[j-m+lag]){
+                mp[j-m+lag] = z;
+                mpI[j-m+lag] = j-m;
+            }
         }
     }
 }
-
-
