@@ -3,7 +3,7 @@
 #include<stdlib.h>
 #include<math.h>
 #define err 0x40
-#define chunkSz 4096  // We have to keep several arrays in L2
+#define chunkSz 0x1000  // We have to keep several arrays in L2
 
 
 struct mpStats{
@@ -64,30 +64,11 @@ void sc_destroy(tsdesc* t){
     free(t);
 }
 
-void yansmethod(const double* T, const double* mu, const double* std, double* mp, int* mpi, const int n, const int m, int lag){
-    double accum = 0;
-    for(int i = 0; i < m;i++){
-        accum += T[i]*T[i+lag];
-    }
-    double fw3 = (accum - T[0]*T[lag])/(std[0]*std[lag]);
-    if(fw3 < mp[0]){
-        mp[0] = fw3;
-        mpi[0] = lag;
-    }
-    for(int i = m; i < n-m-lag; i++){
-        accum = accum - T[i-m]*T[i-m+lag] + T[i]*T[i+lag];
-        fw3 = (accum - mu[i]*mu[i+lag])/(std[i]*std[i+lag]);
-        if(fw3 < mp[i]){
-            mp[i] = fw3;
-            mpi[i] = lag;
-        }
-        if(fw3 < mp[i+lag]){
-            mp[i+lag] = fw3;
-            mpi[i+lag] = i+lag;
-        }
-    }
+void mp_destroy(matrixProfileObj* matp){
+    free(matp->mp);
+    free(matp->mpI);
+    free(matp);
 }
-
 
 /*
  * We can add a correction to get the count considering diagonals only over the upper triangular portion.
@@ -128,7 +109,7 @@ static double incQ(double Q, double M, double x, int k){
 
 /* This uses a variation on Welford's method for sample variance to compute the mean and standard deviation. 
  * It resets the summation once the term under consideration does not share any terms with the last exact summation. */
-int winmeansig(const double* T, double* mu, double* sigma, int n, int m){
+void winmeansig(const double* T, double* mu, double* sigma, int n, int m){
     double M = T[0];
     double Q = 0;
     for(int i = 1; i < m; i++){
@@ -157,24 +138,23 @@ int winmeansig(const double* T, double* mu, double* sigma, int n, int m){
         }
 
     }
-    return 0;
 }
 
-static double distInc(double a, double b, double c){
+static inline double distInc(double a, double b, double c){
     return a + b*c;
 }
 
-static double distDec(double a, double b, double c){
+static inline double distDec(double a, double b, double c){
     return a - b*c;
 }
 
-static double znorm(double p, double mu_s, double mu_l, double sigma_s, double sigma_l){
+static inline double znorm(double p, double mu_s, double mu_l, double sigma_s, double sigma_l){
     return (p - mu_s*mu_l)/(sigma_s*sigma_l);
 }
 
 void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, int* mpI, const int n, const int m, const int lag){
+    printf("n: %d\n",n);
     double x = 0;
-    printf("check\n");
     for(int i = 0; i < m; i++){
         x += T[i]*T[i+lag];
     }
@@ -199,14 +179,19 @@ void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, 
     }  
 }
 
+static inline void scSetupBlock(const double* T, const double* mu, const double* sigma, double* mp, int* mpI, int n, int m, int lag, int offset){
+    mpSelf(&T[offset],&mu[offset],&sigma[offset],&mp[offset],&mpI[offset],n-offset,m,lag);
+}
+
 void scBlockSolver(tsdesc* t, matrixProfileObj* mp){
     int m = t->m;
     int n = t->n;
-    for(int i = 0; i < n-chunkSz; i+= chunkSz){    
-       /* for(int lag = m; lag < n-(i+1)*chunkSz; lag += chunkSz){
-            mpSelf(&(t->T[i]),&(t->mu[i]),&(t->sigma[i]),&(mp->mp[i]),&(mp->mpI[i]),n-i*chunkSz,t->m,lag);
-        }*/ 
-        printf("%d\n",(n-i)*chunkSz);
+    printf("base n: %d\n",n);
+    for(int i = 0; n-i > 0; i+= chunkSz){    
+        for(int lag = m; lag < n-i-m; lag += m){ // technically could be lag++, we iterate over the same portion with different lag
+            scSetupBlock(t->T,t->mu,t->sigma,mp->mp,mp->mpI,n,m,lag,i);
+            printf("%d\n",i*chunkSz);
+        } 
     }
 } 
 
@@ -216,36 +201,29 @@ int main(void){
     const int m = 400;
     srand(395);
     double* x = (double*)malloc(n*sizeof(double));
-    double* mp = (double*)malloc(n*sizeof(double));
-    int* mpI = (int*) malloc(n*sizeof(double));
-    if(x == NULL){
+    matrixProfileObj* matp = mp_init(n,m);
+    if((x == NULL) || (matp == NULL)){
+        printf("malloc failed me again\n");
+        free(x);
+        free(matp);
         exit(1);
-    }
+    }    
     for(int i = 0; i < n; i++){
         x[i] = (double)rand()/RAND_MAX;
-        mp[i] = (double)rand()/RAND_MAX;
-        mpI[i] = (double)rand()/RAND_MAX;
+        matp->mp[i] = (double)rand()/RAND_MAX;
+        matp->mpI[i] = (double)rand()/RAND_MAX;
     }
     tsdesc* s = sc_init(x,n,m);
     winmeansig(x,s->mu,s->sigma,n,m);
-    matrixProfileObj* matp = mp_init(n,m);
     clock_t t1 = clock();
     scBlockSolver(s,matp);
     clock_t t2 = clock();
-    clock_t t3 = clock();
-    for(int i = 0; i < 20; i++){
-      int lag = i*m;
-      yansmethod(x,s->mu,s->sigma,mp,mpI,n,m,lag);
-    }
-    clock_t t4 = clock();
    /* printf("time: %lf  \n ",(double)(t2-t1)/CLOCKS_PER_SEC);
-    printf("time: %lf  \n ",(double)(t3-t2)/CLOCKS_PER_SEC);
-    printf("time: %lf  \n ",(double)(t4-t3)/CLOCKS_PER_SEC);
   */  for(int i = 1; i < n; i+= 865536){
         printf("%d, %lf\n",i,x[i+m]);
     }
+    
     sc_destroy(s);
+    mp_destroy(matp);
     free(x);
-    free(mpI);
-    free(mp);
 }
