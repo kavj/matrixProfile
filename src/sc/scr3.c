@@ -89,7 +89,6 @@ int iterCnt(int* x, int xOffs, int n, int m, double perc){
     return k;
 }
 
-
 static double decM(double M, double x, int k){
     return (k*M-x)/(k-1);
 }
@@ -154,6 +153,7 @@ static inline double znorm(double p, double mu_s, double mu_l, double sigma_s, d
 
 void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, int* mpI, const int n, const int m, const int lag){
     printf("n: %d\n",n);
+    printf("lag: %d\n",lag);
     double x = 0;
     for(int i = 0; i < m; i++){
         x += T[i]*T[i+lag];
@@ -189,9 +189,17 @@ void scBlockSolver(tsdesc* t, matrixProfileObj* mp){
     printf("base n: %d\n",n);
     for(int i = 0; n-i > 0; i+= chunkSz){    
         for(int lag = m; lag < n-i-m; lag += m){ // technically could be lag++, we iterate over the same portion with different lag
-            scSetupBlock(t->T,t->mu,t->sigma,mp->mp,mp->mpI,n,m,lag,i);
-            printf("%d\n",i*chunkSz);
+            //scSetupBlock(t->T,t->mu,t->sigma,mp->mp,mp->mpI,n,m,lag,i);
+           // printf("%d\n",i*chunkSz);
+             
         } 
+        if((n-i) > 0){
+            printf("%d %d %lf \n",i,n-i,mp->mp[n-m]);
+        }
+        else{
+            printf("going over\n");
+            exit(1);
+        }
     }
 } 
 
@@ -208,7 +216,7 @@ int main(void){
         free(matp);
         exit(1);
     }    
-    for(int i = 0; i < n; i++){
+    for(int i = 0; i < n-m+1; i++){
         x[i] = (double)rand()/RAND_MAX;
         matp->mp[i] = (double)rand()/RAND_MAX;
         matp->mpI[i] = (double)rand()/RAND_MAX;
@@ -219,10 +227,10 @@ int main(void){
     scBlockSolver(s,matp);
     clock_t t2 = clock();
    /* printf("time: %lf  \n ",(double)(t2-t1)/CLOCKS_PER_SEC);
-  */  for(int i = 1; i < n; i+= 865536){
+    for(int i = 1; i < n; i+= 865536){
         printf("%d, %lf\n",i,x[i+m]);
-    }
-    
+    }*/
+    printf("back in main\n");
     sc_destroy(s);
     mp_destroy(matp);
     free(x);
