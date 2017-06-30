@@ -1,10 +1,15 @@
 #include<stdio.h>
 #include<time.h>
 #include<stdlib.h>
+#include<assert.h>
 #include<math.h>
+#include<unistd.h>
 #define err 0x40
-#define chunkSz 0x1000  // We have to keep several arrays in L2
+#define chunkSz 0x10000  // We have to keep several arrays in L2
 
+#ifndef NDEBUG
+#define NDEBUG
+#endif
 
 struct mpStats{
     const double* T;
@@ -118,7 +123,7 @@ void winmeansig(const double* T, double* mu, double* sigma, int n, int m){
     mu[0] = M;
     sigma[0] = sqrt(Q/m);
     for(int i = 0; i < n-m+1; i+=m){
-        int w = (i < n-2*m+1)? i+m : n;
+        int w = (i < n-2*m+1) ? i+m : n-m;
         double Q_prev = Q;
         double M_prev = M;
         Q = 0;
@@ -152,30 +157,31 @@ static inline double znorm(double p, double mu_s, double mu_l, double sigma_s, d
 }
 
 void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, int* mpI, const int n, const int m, const int lag){
-    printf("n: %d\n",n);
-    printf("lag: %d\n",lag);
     double x = 0;
     for(int i = 0; i < m; i++){
         x += T[i]*T[i+lag];
     }
     double z = znorm(x,mu[0],mu[lag],sigma[0],sigma[lag]);
-    for(int i = 0; i < n-m-lag; i+=m){
+
+    for(int i = 1; i < n-m-lag; i+=m){
         double y = x;
         x = 0;
-        int w = (i < n-2*m-lag) ? i+m : n;
+        int w = (i+2*m+lag < n) ? i+m : n-lag-m;
         for(int j = i; j < w; j++){
-            x = distInc(x,T[j+m],T[lag+j+m]);
-            y = distDec(y,T[j],T[lag+j]);
-            z = znorm(x,mu[j+1],mu[lag+j+1],sigma[j+1],sigma[lag+j+1]);
-            if(z < mp[j+1]){
-                mp[j+1] = z;
-                mpI[j+1] = lag+j+1;
+            assert(j+lag+m-1 < n);
+            x = distInc(x,T[j+m-1],T[lag+j+m-1]);
+            y = distDec(y,T[j-1],T[lag+j-1]);
+            z = znorm(x,mu[j],mu[lag+j],sigma[j],sigma[lag+j]);
+            if(z > mp[j]){
+                mp[j] = z;
+                mpI[j] = lag+j;
             }
-            if(z < mp[lag+j+1]){
-                mp[lag+j+1] = z;
-                mpI[lag+j+1] = j+1;
+            if(z > mp[lag+j]){
+                mp[lag+j] = z;
+                mpI[lag+j] = j;
             }
         }
+       // printf("n: %d m: %d lag: %d  w: %d\n",n,m,lag,w);
     }  
 }
 
@@ -183,29 +189,24 @@ static inline void scSetupBlock(const double* T, const double* mu, const double*
     mpSelf(&T[offset],&mu[offset],&sigma[offset],&mp[offset],&mpI[offset],n-offset,m,lag);
 }
 
-void scBlockSolver(tsdesc* t, matrixProfileObj* mp){
+void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
     int m = t->m;
     int n = t->n;
-    printf("base n: %d\n",n);
-    for(int i = 0; n-i > 0; i+= chunkSz){    
-        for(int lag = m; lag < n-i-m; lag += m){ // technically could be lag++, we iterate over the same portion with different lag
-            //scSetupBlock(t->T,t->mu,t->sigma,mp->mp,mp->mpI,n,m,lag,i);
-           // printf("%d\n",i*chunkSz);
-             
+    //printf("base n: %d\n",n);
+    assert(t != NULL);
+    assert(matp != NULL);
+    for(int i = 0; i < n; i+= chunkSz){    
+       // printf("i: %d\n",i);
+        for(int lag = m; lag < n-i-m; lag++){ // technically could be lag++, we iterate over the same portion with different lag
+            assert(lag < n-i-m); 
+            scSetupBlock(t->T,t->mu,t->sigma,matp->mp,matp->mpI,n,m,lag,i);
         } 
-        if((n-i) > 0){
-            printf("%d %d %lf \n",i,n-i,mp->mp[n-m]);
-        }
-        else{
-            printf("going over\n");
-            exit(1);
-        }
     }
 } 
 
 
 int main(void){
-    const int n = 16777216/16;
+    const int n = 131072*2;
     const int m = 400;
     srand(395);
     double* x = (double*)malloc(n*sizeof(double));
@@ -223,14 +224,12 @@ int main(void){
     }
     tsdesc* s = sc_init(x,n,m);
     winmeansig(x,s->mu,s->sigma,n,m);
+    assert(matp != NULL);
+    assert(s != NULL);
     clock_t t1 = clock();
     scBlockSolver(s,matp);
     clock_t t2 = clock();
-   /* printf("time: %lf  \n ",(double)(t2-t1)/CLOCKS_PER_SEC);
-    for(int i = 1; i < n; i+= 865536){
-        printf("%d, %lf\n",i,x[i+m]);
-    }*/
-    printf("back in main\n");
+    printf("time: %lf\n",(double)(t2-t1)/CLOCKS_PER_SEC);
     sc_destroy(s);
     mp_destroy(matp);
     free(x);
