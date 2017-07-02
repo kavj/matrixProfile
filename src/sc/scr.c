@@ -6,15 +6,6 @@
 #define err 0x40
 #define chunkSz 4096  // We have to keep several arrays in L2
 
-struct mpStats{
-    const double* T;
-    double* mu;
-    double* sig;
-    int n;
-    int m;
-};
-
-typedef struct mpStats tsdesc;
 
 
 /* allocate memory and setup structures */
@@ -76,7 +67,6 @@ static double incQ(double Q, double M, double x, int k){
 }
 
 
-
 /* This uses a variation on Welford's method for sample variance to compute the mean and standard deviation. 
  * It resets the summation once the term under consideration does not share any terms with the last exact summation. */
 int winmeansig(const double* T, double* mu, double* sigma, int n, int m){
@@ -111,40 +101,4 @@ int winmeansig(const double* T, double* mu, double* sigma, int n, int m){
     return 0;
 }
 
-static double distInc(double a, double b, double c){
-    return a + b*c;
-}
 
-static double distDec(double a, double b, double c){
-    return a - b*c;
-}
-
-static double znorm(double p, double mu_s, double mu_l, double sigma_l, double sigma_l){
-    return (p - mu_s*mu_l)/(sigma_s*sigma_l);
-}
-
-void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, int* mpI, const int n, const int m){
-    double x = 0;
-    for(int j = 0; j < m; i++){
-        x += T[i]*T[i+lag];
-    }
-    double z = znorm(x,mu[0],mu[lag],sigma[0],sigma[lag]);
-    for(int i = 0; i < n-m-lag; i+=m){
-        double y = x;
-        x = 0;
-        w = (i < n-2*m-lag) ? i+m : n;
-        for(int j = i; j < w; j++)
-            x = distInc(x,T[j+m],T[lag+j+m]);
-            y = distDec(y,T[j],T[lag+j]);
-            z = znorm(x,mu[j+1],mu[lag+j+1],sigma[j+1],sigma[lag+j+1]);
-            if(z < mp[j+1]){
-                mp[j+1] = z;
-                mpI[j+1] = lag+j+1;
-            }
-            if(z < mp[lag+j+1]){
-                mp[lag+j+1] = z;
-                mpI[lag+j+1] = j+1;
-            }
-        }
-    }
-}
