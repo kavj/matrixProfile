@@ -4,6 +4,8 @@
 #include<stdlib.h>
 #include<math.h>
 #include<assert.h>
+#define blockSz 64
+
 
 static double decM(double M, double x, int k){
     return (k*M-x)/(k-1);
@@ -77,10 +79,10 @@ static void mpSelf(const double* T, const double* mu, const double* sigma, doubl
         x = 0;
         int w = (i+2*m+lag < n) ? i+m : n-lag-m;
         for(int j = i; j < w; j++){
-            assert(j+lag+m-1 < n);
             x = distInc(x,T[j+m-1],T[lag+j+m-1]);
             y = distDec(y,T[j-1],T[lag+j-1]);
-            z = znorm(x,mu[j],mu[lag+j],sigma[j],sigma[lag+j]);
+            z = (x-mu[j]*mu[lag+j])/(sigma[j]*sigma[lag+j]);
+           // z = znorm(x,mu[j],mu[lag+j],sigma[j],sigma[lag+j]);
             if(z > mp[j]){
                 mp[j] = z;
                 mpI[j] = lag+j;
@@ -93,7 +95,7 @@ static void mpSelf(const double* T, const double* mu, const double* sigma, doubl
     }
 }
 
-
+/*
 static void mvar(double* t,double* mp, long* mpI,int n, int m, int lag){
     double Mx = t[0];
     double My = t[lag];
@@ -114,14 +116,46 @@ static void mvar(double* t,double* mp, long* mpI,int n, int m, int lag){
         w = m*Sxy/(Sx*Sy);
         if(mp[i] > w){
             mp[i] = w;
-            mpI[i] = k;      
+            mpI[i] = k;
         }
         if(mp[k] > w){
             mp[k] = w;
             mpI[k] = i;
-        } 
-    }   
+        }
+    }
+}*/
+
+
+static void mvar(double* t,double* mp, int* mpI,int n, int m, int lag){
+    double Mx = t[0];
+    double My = t[lag];
+    double Sx = 0;
+    double Sy = 0;
+    double Sxy = 0;
+    double d = 1/m;
+    for(int i = 1; i < m; i++){
+        int k = i+lag;
+        double v = t[i] - Mx;
+        Mx += v*d;
+        double w = t[i]-Mx;
+        Sx += v*w;
+        v = t[k] - My;
+        Sxy += v*w;
+        My += v*d;
+        Sy += v*(t[k]-My);
+        w = m*Sxy/(Sx*Sy);
+        if(mp[i] > w){
+            mp[i] = w;
+            mpI[i] = k;
+        }
+        if(mp[k] > w){
+            mp[k] = w;
+            mpI[k] = i;
+        }
+    }
 }
+
+
 
 
 static double controlSeq(double* T, int n, int m){
@@ -134,11 +168,11 @@ static double controlSeq(double* T, int n, int m){
 
 int main(void){
     const int n = 16*16*131072;
-    const int m = n-2048;
+    const int m = 2048;
     srand(395);
     double* x =  malloc(n*sizeof(double));
     double* mp = malloc(n*sizeof(double));
-    long* mpI = malloc(n*sizeof(long)); 
+    int* mpI = malloc(n*sizeof(int)); 
     double* mu = malloc(n*sizeof(double));
     double* sigma = malloc(n*sizeof(double));
     
@@ -152,8 +186,8 @@ int main(void){
     clock_t t1 = clock();
     
     for(int i = 0; i < 100; i++){
-        mvar(x,mp,mpI,n,m,1024);
-       //mpSelf(x,mu,sigma,mp,mpI,n,m,m);  
+       //mvar(x,mp,mpI,n,m,1024);
+       mpSelf(x,mu,sigma,mp,mpI,n,m,m);  
         //a += controlSeq(x,n,m);
     }
     clock_t t2 = clock();
