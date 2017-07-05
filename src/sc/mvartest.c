@@ -4,7 +4,7 @@
 #include<stdlib.h>
 #include<math.h>
 #include<assert.h>
-#define blockSz 64
+
 
 
 static double decM(double M, double x, int k){
@@ -49,101 +49,70 @@ static void winmeansig(const double* T, double* mu, double* sigma, int n, int m)
             Q_prev = incQ(Q_prev,M_prev,T[j+m],m);
             M_prev = incM(M_prev,T[j+m],m);
             mu[j+1] = M_prev;
-            sigma[j+1] = sqrt(Q_prev/m);
+            sigma[j+1] = sqrt(m/Q_prev);  // we save the reciprocal instead of the standard deviation to avoid division later. It makes a big difference.
         }
 
     }
 }
 
-static inline double distInc(double a, double b, double c){
-    return a + b*c;
-}
 
-static inline double distDec(double a, double b, double c){
-    return a - b*c;
-}
-
-static inline double znorm(double p, double mu_s, double mu_l, double sigma_s, double sigma_l){
-    return (p - mu_s*mu_l)/(sigma_s*sigma_l);
-}
-
-static void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, int* mpI, const int n, const int m, const int lag){
-    double x = 0;
+static void mvar(double* t, double* sigmaInv, double* mp, double Mx, double My, int* mpI,int n, int m, int lag){
+    double Cxy = 0;
+    double normFact = 1/m;
+    double buffer[64];
     for(int i = 0; i < m; i++){
-        x += T[i]*T[i+lag];
+        Cxy += (t[i]-Mx)*(t[i+lag]-My);
     }
-    double z = znorm(x,mu[0],mu[lag],sigma[0],sigma[lag]);
-
-    for(int i = 1; i < n-m-lag; i+=m){
-        double y = x;
-        x = 0;
-        int w = (i+2*m+lag < n) ? i+m : n-lag-m;
+    double Cr = Cxy*sigmaInv[0]*sigmaInv[lag]*normFact;
+    if(mp[0] < Cr){
+        mp[0] = Cr;
+        mpI[0] = 0;
+    }
+    if(mp[lag] < Cr){
+        mp[lag] = Cr;
+        mpI[0] = lag;
+    }
+    for(int i = 1; i < m; i++){
+        int w = i+16 < m ? i+16: m-i;
         for(int j = i; j < w; j++){
-            x = distInc(x,T[j+m-1],T[lag+j+m-1]);
-            y = distDec(y,T[j-1],T[lag+j-1]);
-            z = (x-mu[j]*mu[lag+j])/(sigma[j]*sigma[lag+j]);
-           // z = znorm(x,mu[j],mu[lag+j],sigma[j],sigma[lag+j]);
-            if(z > mp[j]){
-                mp[j] = z;
-                mpI[j] = lag+j;
+           // buffer[j] = 
+        }
+        for(int j = 0; j < w; j++){
+            
+        }
+        for(int j = 0; j < w; j++){
+            /*if(mp[i] < Cr){
+                mp[i] = Cr;
+                //mpI[i] = k;
             }
-            if(z > mp[lag+j]){
-                mp[lag+j] = z;
-                mpI[lag+j] = j;
-            }
+            if(mp[k] < Cr){
+                mp[k] = Cr;
+                mpI[k] = i;
+            }*/
         }
     }
 }
 
-/*
-static void mvar(double* t,double* mp, long* mpI,int n, int m, int lag){
+
+static void mvar2(double* t,double* mp, int* mpI,int n, int m, int lag){
     double Mx = t[0];
     double My = t[lag];
     double Sx = 0;
     double Sy = 0;
     double Sxy = 0;
-
-    for(int i = 1; i < m; i++){
+    double invm = 1/m;
+    for(int i = 1; i < n-m-lag; i++){
         int k = i+lag;
         double v = t[i] - Mx;
-        Mx += v/m;
+        Mx += v*invm;
         double w = t[i]-Mx;
         Sx += v*w;
         v = t[k] - My;
         Sxy += v*w;
-        My += v/m;
+        My += v*invm;
         Sy += v*(t[k]-My);
-        w = m*Sxy/(Sx*Sy);
-        if(mp[i] > w){
-            mp[i] = w;
-            mpI[i] = k;
-        }
-        if(mp[k] > w){
-            mp[k] = w;
-            mpI[k] = i;
-        }
-    }
-}*/
-
-
-static void mvar(double* t,double* mp, int* mpI,int n, int m, int lag){
-    double Mx = t[0];
-    double My = t[lag];
-    double Sx = 0;
-    double Sy = 0;
-    double Sxy = 0;
-    double d = 1/m;
-    for(int i = 1; i < m; i++){
-        int k = i+lag;
-        double v = t[i] - Mx;
-        Mx += v*d;
-        double w = t[i]-Mx;
-        Sx += v*w;
-        v = t[k] - My;
-        Sxy += v*w;
-        My += v*d;
-        Sy += v*(t[k]-My);
-        w = m*Sxy/(Sx*Sy);
+        double z = 1/(Sx*Sy);
+        w = m*Sxy;
         if(mp[i] > w){
             mp[i] = w;
             mpI[i] = k;
@@ -154,8 +123,6 @@ static void mvar(double* t,double* mp, int* mpI,int n, int m, int lag){
         }
     }
 }
-
-
 
 
 static double controlSeq(double* T, int n, int m){
@@ -167,29 +134,29 @@ static double controlSeq(double* T, int n, int m){
 }
 
 int main(void){
-    const int n = 16*16*131072;
-    const int m = 2048;
+    const int n = 131072;
+    const int m = 3000;
     srand(395);
     double* x =  malloc(n*sizeof(double));
     double* mp = malloc(n*sizeof(double));
     int* mpI = malloc(n*sizeof(int)); 
     double* mu = malloc(n*sizeof(double));
-    double* sigma = malloc(n*sizeof(double));
+    double* sigmaInv = malloc(n*sizeof(double));
     
     for(int i = 0; i < n-m+1; i++){
         x[i] = (double)rand()/RAND_MAX;
     }
-    //winmeansig(x,mu,sigma,n,m); 
+    winmeansig(x,mu,sigmaInv,n,m); 
     printf("end random\n");
     printf("%lf\n",mp[m-1]);
     double a = 0;
     clock_t t1 = clock();
     
-    for(int i = 0; i < 100; i++){
-       //mvar(x,mp,mpI,n,m,1024);
-       mpSelf(x,mu,sigma,mp,mpI,n,m,m);  
-        //a += controlSeq(x,n,m);
+    for(int i = 0; i < n; i++){
+         mvar2(x,mp,mpI,n,m,i);
+      // mvar(x,mp,sigmaInv,mpI,n,m,1024);
     }
+
     clock_t t2 = clock();
     
     printf("%lf\n",a);
@@ -199,9 +166,5 @@ int main(void){
     free(mp);
     free(mpI);
     free(mu);
-    free(sigma);
+    free(sigmaInv);
 }
-
-
-
-
