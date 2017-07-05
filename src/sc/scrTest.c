@@ -5,11 +5,13 @@
 #include<math.h>
 #include<unistd.h>
 #define err 0x40
-#define chunkSz 0x10000  // We have to keep several arrays in L2
+#define chunkSz 0x1000  // We have to keep several arrays in L2
 
 #ifndef NDEBUG
 #define NDEBUG
 #endif
+
+static long B;
 
 struct mpStats{
     double* T;
@@ -168,6 +170,7 @@ void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, 
         x = 0;
         int w = (i+2*m+lag < n) ? i+m : n-lag-m;
         for(int j = i; j < w; j++){
+            B++;
             assert(j+lag+m-1 < n);
             x = distInc(x,T[j+m-1],T[lag+j+m-1]);
             y = distDec(y,T[j-1],T[lag+j-1]);
@@ -186,25 +189,29 @@ void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, 
 }
 
 static void testMPAlg(double* T, double* mp, int* mpI, double* mu, double* sig, int n, int m, int lag){
-   double mux = 0;
-   double muy = 0;
+   double mux = mu[0];
+   double muy = mu[lag];
    double cov = 0;
+   double invm = 1/m;
    for(int i = 0; i < m; i++){
-       double dx = T[i] - mux;
-       mux += mux/i;
-       muy += (T[lag+i] - muy);
-       cov += dx*(T[i+lag]-muy);
+      /* double dx = T[i] - mux;
+       double dy = T[i+lag] - muy;
+       mux += mux*invm;
+       muy += muy*invm;*/
+       cov += (T[i]-mux)*(T[i+lag]-muy);
    }
    for(int i = 0; i < n - m - lag; i++){
+       
        double dx = T[i] - mux;
-       mux -= dx/m;
-       muy -= dx*(T[lag+i]-muy)/m;
+       double dy = T[i+lag] - muy;
+       mux -= dx*invm; //mux -= dx/m;
+       muy -= dx*(T[lag+i]-muy)*invm; // /m;
        cov -= dx*(T[lag+i]-muy);
        dx = T[i+m] - mux;
-       mux += dx/m;
-       muy += dx*(T[lag+i+m]-muy)/m;
+       mux += dx*invm;  // /m;
+       muy += dx*(T[lag+i+m]-muy)*invm; // /m;
        cov += dx*(T[lag+i+m]-muy);
-       double r = cov/(sig[i+1]*sig[lag+i+1]);
+       double r = cov*(sig[i+1]*sig[lag+i+1]);
        if(r > mp[i]){
            mp[i] = r;
            mpI[i] = i;
@@ -217,56 +224,37 @@ static void testMPAlg(double* T, double* mp, int* mpI, double* mu, double* sig, 
 }
 
 
-
-
 static inline void scSetupBlock(double* T, double* mu,  double* sigma, double* mp, int* mpI, int n, int m, int lag, int offset){
-   testMPAlg(&T[offset],&mp[offset],&mpI[offset],&sigma[offset],n-offset,m,lag);
-   // mpSelf(&T[offset],&mu[offset],&sigma[offset],&mp[offset],&mpI[offset],n-offset,m,lag);
+   int k = chunkSz < n - offset ? chunkSz : n - offset;
+   testMPAlg(&T[offset],&mp[offset],&mpI[offset],&mu[offset],&sigma[offset],k,m,lag);
+   //mpSelf(&T[offset],&mu[offset],&sigma[offset],&mp[offset],&mpI[offset],k,m,lag);
 }
 
 void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
     int m = t->m;
     int n = t->n;
-    //printf("base n: %d\n",n);
+    printf("base n: %d\n",n);
     assert(t != NULL);
     assert(matp != NULL);
     for(int i = 0; i < n; i+= chunkSz){    
-       // printf("i: %d\n",i);
-        for(int lag = m; lag < n-i-m; lag++){ // technically could be lag++, we iterate over the same portion with different lag
-            assert(lag < n-i-m); 
+    //   printf("i: %d\n",i);
+       // printf("%d start\n",i);
+        int lag = 0;
+        while(lag < n-i-m){
+            //for(int lag = m; lag < n-i-m; lag++){ // technically could be lag++, we iterate over the same portion with different lag
             scSetupBlock(t->T,t->mu,t->sigma,matp->mp,matp->mpI,n,m,lag,i);
+            lag++;
         } 
+        printf("lag: %d\n",lag);
     }
 } 
 
-static void allProdNaive(double* T, double* b, double* mp, int n, int m){
-    long a = 0;
-    for(int i = 0; i < n-m; i+=m){
-        double t = 0;
-        for(int lag = 0; lag < n-5*m; lag++){
-            for(int j = i+lag; j < 5*m; j++){
-                a++;
-                t -= b[i%m];
-                b[i%m] = T[i]*T[j];
-                t += T[i]*T[j];// - T[i-m]*T[lag+i-m];
-                mp[i] = t;
-            }
-        }
-    }
-    printf("%lu\n",a);
-}
 
-static inline void onlineCovInc(double Mx, double My, double x, double y, double m){
-    
-}
-
-static inline void onlineCovDec(double Mx, double My, double x, double y, double m){
-
-}
 
 
 int main(void){
-    const int n = 131072;
+    B = 0;
+    const int n = 131072*4;
     const int m = 400;
     srand(395);
     double* x = (double*)malloc(n*sizeof(double));
@@ -285,12 +273,12 @@ int main(void){
     tsdesc* t = sc_init(x,n,m);
     winmeansig(x,t->mu,t->sigma,n,m);
     clock_t t1 = clock();
-    for(int lag = 0; lag < n-m; lag++){
-        testMPAlg(x,matp->mp,matp->mpI,t->sigma,n,m,lag);
-    }
+    scBlockSolver(t,matp);
+        // testMPAlg(x,matp->mp,matp->mpI,t->mu,t->sigma,n,m,lag);
     clock_t t2 = clock();
     printf("time: %lf\n",(double)(t2-t1)/CLOCKS_PER_SEC);
     mp_destroy(matp);
     free(x);
     free(b);
+    printf("%lu\n",B);
 }
