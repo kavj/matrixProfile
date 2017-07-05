@@ -1,20 +1,32 @@
-//#include<cstdlib>
-//#include<cmath>
+#include<stdio.h>
 #include<stdlib.h>
 #include<math.h>
-//#include<random>
 #define err 0x40
 #define chunkSz 4096  // We have to keep several arrays in L2
+
+
+static long B;
 
 struct desc{
     double* T;
     double* mu;
-    double* sigInv;
+    double* sigmaInv;
     int n;
-    int m; 
+    int m;
+    int chsz;
 };
 
+struct mpObj{
+    double* mp;
+    int* mpI;
+};
+
+
 typedef struct desc tsdesc;
+typedef struct mpObj matrixProfileObj;
+
+
+
 
 
 /* allocate memory and setup structures */
@@ -26,10 +38,10 @@ tsdesc* sc_init(double* T, int n, int m){
         t->n = n;
         t->m = m;
         t->mu = (double*)malloc(n*sizeof(double));
-        t->sigInv = (double*)malloc(n*sizeof(double));
-        if(t->mu == NULL || t->sigInv == NULL){
+        t->sigmaInv = (double*)malloc(n*sizeof(double));
+        if(t->mu == NULL || t->sigmaInv == NULL){
             free(t->mu);
-            free(t->sigInv);
+            free(t->sigmaInv);
             free(t);
             t = NULL;
         }
@@ -69,14 +81,14 @@ static double incM(double M, double x, int k){
     return M + (x-M)/k;
 }
 
-static double decQ(double Q, double M, double x, int k){
-    return Q - (x-M)*(x-M)/k;
+static double decS(double S, double M, double x, int k){
+    return S - (x-M)*(x-M)/k;
 }
 
 
 /* M here indicates the mean of k-1 values, not k values. You can just decrement M first*/
-static double incQ(double Q, double M, double x, int k){
-    return Q + (x-M)*(x-M)/k;
+static double incS(double S, double M, double x, int k){
+    return S + (x-M)*(x-M)/k;
 }
 
 
@@ -87,7 +99,7 @@ void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
     double M = T[0];
     double Q = 0;
     for(int i = 1; i < m; i++){
-        Q = incQ(Q,M,T[i],i+1);
+        Q = incS(Q,M,T[i],i+1);
         M = incM(M,T[i],i+1);
     }
     mu[0] = M;
@@ -100,12 +112,12 @@ void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
         M = T[i+m];
         for(int j = i; j < w; j++){
             if(j != i){
-                Q = incQ(Q,M,T[j+m],j-i+1);
+                Q = incS(Q,M,T[j+m],j-i+1);
                 M = incM(M,T[j+m],j-i+1);
             }
             M_prev = decM(M_prev,T[j],m);
-            Q_prev = decQ(Q_prev,M_prev,T[j],m);
-            Q_prev = incQ(Q_prev,M_prev,T[j+m],m);
+            Q_prev = decS(Q_prev,M_prev,T[j],m);
+            Q_prev = incS(Q_prev,M_prev,T[j+m],m);
             M_prev = incM(M_prev,T[j+m],m);
             mu[j+1] = M_prev;
             sigmaInv[j+1] = sqrt(m/Q_prev);
@@ -114,46 +126,10 @@ void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
     }
 }
 
-/*
-void winmeansig(double* T, double* mu, double* sigmaInv, int n, int m){
-    double M = T[0];
-    double Sx = 0;
-    double a = 1/m;     // inverse of m
-    double b = 1/(m-1); // inverse of m-1
-    double c = (m-1)/m; 
-    for(int i = 1; i < m; i++){
-        double f = (double) (i/(i+1)); 
-        double s = T[i]-M;
-        M +=  s*(1/(i+1));
-        Sx += f*s;
-    }   
-    mu[0] = M;
-    sigmaInv[0] = sqrt(m/Sx);
-    for(int i = 0; i < n-m; i += m){
-        int w = (i < n-2*m+1) ? i+m : n-m;
-        double Sx_prev = Sx;
-        double M_prev  =  M;
-        Sx = 0;
-        M = T[i+m];
-         
-        for(int j = i+1; j < w; j++){
-            M_prev = (m*M_prev - T[j])*b;
-            double s = M - T[j+m];
-            double s_prev = M_prev - T[j+m];    
-            M_prev += s_prev*a;
-            Sx_prev += c*(s_prev*s_prev);
-            Sx += (s_prev*s_prev)/j;
-            M += s/j; 
-            
-        }
-   
-    }
- 
-}*/
 
 /* These "effectively" add and remove terms from mean and sume of products calculations. */
 /* C means data is already centered.*/
-static double decM(double M, double x, double invkk, int k){
+static double decCM(double M, double x, double invkk, int k){
     return (k*M-x)*invkk;
 }
 
@@ -181,10 +157,10 @@ void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, doub
     double Cxy = sigmaInv[0]*sigmaInv[lag];
     double invm = (double)1/m;
     double invmm = (double)(1/(m-1));
-    double mdec = (double)(m-1)/m;
+    double mminv = (double)(m-1)/m;
 
     for(int i = 0; i < m; i++){ 
-        Sxy += (T[i]-Mx*(T[i+lag]-My);
+        Sxy += (T[i]-Mx)*(T[i+lag]-My);
     }
     Cxy *=  Sxy;
     if(mp[0] < Cxy){  /* Branching tends to be faster than unnecessary writes here */
@@ -198,13 +174,13 @@ void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, doub
     for(int i = 0; i < n-m-lag; i++){
         Cxy = sigmaInv[i+1]*sigmaInv[i+lag+1];
 
-        Mx = decM(Mx,T[i],invmm,m);
-        My = decM(My,T[i+lag],invmm,m);
+        Mx = decCM(Mx,T[i],invmm,m);
+        My = decCM(My,T[i+lag],invmm,m);
 
         double x = T[i+m] - Mx;
         double y = T[i+m+lag] - My;
 
-        Sxy = incSxy(Sxy,x,y,invmm);
+        Sxy = incCSxy(Sxy,x,y,invmm);
         Cxy *= Sxy;
 
         Mx = incCM(Mx,x,invm);
@@ -221,5 +197,30 @@ void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, doub
     }
 }
 
+
+void corrToDist(double* mp, int n, int m){
+    for(int i = 0; i < n-m+1; i++){
+        mp[i] = sqrt(2*m*(1-mp[i]));
+    }
+}
+
+static inline void scSetupBlock(double* T, double* mu,  double* sigmaInv, double* mp, int* mpI, int n, int m, int lag, int offset){
+   int k = chunkSz < n - offset ? chunkSz : n - offset;
+   sccomp(&T[offset],&sigmaInv[offset],&mp[offset],&mpI[offset],mu[offset],mu[offset+lag],k,m,offset,lag);
+}
+
+void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
+    int m = t->m;
+    int n = t->n;
+    printf("base n: %d\n",n);
+    for(int i = 0; i < n; i+= chunkSz){       
+        int lag = 0;
+        while(lag < n-i-m){
+            scSetupBlock(t->T,t->mu,t->sigmaInv,matp->mp,matp->mpI,n,m,lag,i);
+            lag++;
+        }
+        printf("lag: %d\n",lag);
+    }
+}
 
 
