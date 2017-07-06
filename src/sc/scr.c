@@ -1,9 +1,10 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<math.h>
+#include<unistd.h>
 #include "scr.h"
 #define err 0x40
-#define chunkSz 4096  // We have to keep several arrays in L2
+#define chunkSz 0x1000  // We have to keep several arrays in L2
 
 
 /* allocate memory and setup structures */
@@ -27,7 +28,6 @@ tsdesc* sc_init(double* T, int n, int m){
     return t;
 }
 
-
 matrixProfileObj* mp_init(int n, int m){
     matrixProfileObj* matp = malloc(sizeof(matrixProfileObj));
     if(matp != NULL){
@@ -38,6 +38,10 @@ matrixProfileObj* mp_init(int n, int m){
             free(matp->mpI);
             free(matp);
             matp = NULL;
+        }
+        for(int i = 0; i < n-m+1; i++){
+            matp->mp[i] = (double) -1.0;
+            matp->mpI[i] = 0;
         }
     }
     return matp;
@@ -84,13 +88,13 @@ static double incM(double M, double x, int k){
 }
 
 static double decS(double S, double M, double x, int k){
-    return S - (x-M)*(x-M)/k;
+    return S - (k-1)*(x-M)*(x-M)/k;
 }
 
 
 /* M here indicates the mean of k-1 values, not k values. You can just decrement M first*/
 static double incS(double S, double M, double x, int k){
-    return S + (x-M)*(x-M)/k;
+    return S + (k-1)*(x-M)*(x-M)/k;
 }
 
 
@@ -167,15 +171,20 @@ void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, doub
     }
     for(int i = 0; i < n-m-lag; i++){
         Cxy = sigmaInv[i+1]*sigmaInv[i+lag+1];
-
-        Mx = decCM(Mx,T[i],m);
-        My = decCM(My,T[i+lag],m);
-
-        double x = T[i+m] - Mx;
-        double y = T[i+m+lag] - My;
+        double x = T[i];
+        double y = T[i+lag];
+        
+        Mx = decCM(Mx,x,m);
+        My = decCM(My,y,m);
+        Sxy = decCSxy(Sxy,x-Mx,y-My,m);
+        x = T[i+m] - Mx;
+        y = T[i+m+lag] - My;
+  
 
         Sxy = incCSxy(Sxy,x,y,m);
-        Cxy /= Sxy;
+        Cxy = Sxy/Cxy;
+        printf("%.15lf\n",Cxy);
+        sleep(1);
 
         Mx = incCM(Mx,x,m);
         My = incCM(My,y,m);
@@ -214,7 +223,7 @@ void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
             scSetupBlock(t->T,t->mu,t->sigmaInv,matp->mp,matp->mpI,n,m,lag,i);
             lag++;
         }
-        printf("lag: %d\n",lag);
+       // printf("lag: %d\n",lag);
     }
 }
 
