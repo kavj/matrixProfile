@@ -156,11 +156,13 @@ static double incCSxy(double Sxy, double x, double y, double m){
 void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, double Mx, double My, int n, int m, int base, int lag){
     double Sxy = 0;
     double Cxy = sigmaInv[0]*sigmaInv[lag];
-
+    //printf("Mx: %lf My: %lf lag: %d \n",Mx,My,lag);
     for(int i = 0; i < m; i++){
         Sxy += (T[i]-Mx)*(T[i+lag]-My);
     }
-    Cxy *=  Sxy;
+
+
+    Cxy = Sxy/Cxy;
     if(mp[0] < Cxy){
         mp[0] = Cxy;
         mpI[0] = base+lag;
@@ -182,9 +184,7 @@ void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, doub
   
 
         Sxy = incCSxy(Sxy,x,y,m);
-        Cxy = Sxy/Cxy;
-        printf("%.15lf\n",Cxy);
-        sleep(1);
+        Cxy = Sxy/Cxy/m;
 
         Mx = incCM(Mx,x,m);
         My = incCM(My,y,m);
@@ -218,7 +218,7 @@ void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
     int n = t->n;
     printf("base n: %d\n",n);
     for(int i = 0; i < n; i+= chunkSz){       
-        int lag = 0;
+        int lag = m;
         while(lag < n-i-m){
             scSetupBlock(t->T,t->mu,t->sigmaInv,matp->mp,matp->mpI,n,m,lag,i);
             lag++;
