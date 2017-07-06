@@ -6,29 +6,9 @@
 #define chunkSz 4096  // We have to keep several arrays in L2
 
 
-/*
-struct desc{
-    double* T;
-    double* mu;
-    double* sigmaInv;
-    int n;
-    int m;
-    int chsz;
-};
-
-struct mpObj{
-    double* mp;
-    int* mpI;
-};
-
-
-typedef struct desc tsdesc;
-typedef struct mpObj matrixProfileObj;
-
-*/
-
 /* allocate memory and setup structures */
 /* still in debate whether I should overload this for single precision. I need to test stability first */
+
 tsdesc* sc_init(double* T, int n, int m){
     tsdesc* t = (tsdesc*)malloc(sizeof(tsdesc));
     if(t != NULL){
@@ -63,6 +43,19 @@ matrixProfileObj* mp_init(int n, int m){
     return matp;
 }
 
+void sc_destroy(tsdesc* t){
+    free(t->mu);
+    free(t->sigmaInv);
+    free(t);
+}
+
+void mp_destroy(matrixProfileObj* matp){
+    free(matp->mp);
+    free(matp->mpI);
+    free(matp);
+}
+
+
 /*
  * We can add a correction to get the count considering diagonals only over the upper triangular portion.
  * We need a global bound. 
@@ -81,9 +74,6 @@ int iterCnt(int* x, int xOffs, int n, int m, double perc){
     }
     return k;
 }
-
-
-
 
 static double decM(double M, double x, int k){
     return (k*M-x)/(k-1);

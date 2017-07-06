@@ -24,16 +24,15 @@ int iterCnt(int* x, int xOffs, int n, int m, double perc);
 
 void winmeansig(const double* T, double* mu, double* sigma, int n, int m);
 
-void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, int* mpI, int n, int m, int lag); 
+void scBlockSolver(tsdesc* t, matrixProfileObj* matp);
 
 tsdesc* sc_init(double* T, int n, int m);
 
 matrixProfileObj* mp_init(int n, int m);
 
-void sc_destroy(tsdesc* t);
+void sc_destroy(tsdesc* T);
 
 void mp_destroy(matrixProfileObj* matp);
-
 
 
 #endif
