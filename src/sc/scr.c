@@ -1,12 +1,12 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<math.h>
+#include "scr.h"
 #define err 0x40
 #define chunkSz 4096  // We have to keep several arrays in L2
 
 
-static long B;
-
+/*
 struct desc{
     double* T;
     double* mu;
@@ -25,9 +25,7 @@ struct mpObj{
 typedef struct desc tsdesc;
 typedef struct mpObj matrixProfileObj;
 
-
-
-
+*/
 
 /* allocate memory and setup structures */
 /* still in debate whether I should overload this for single precision. I need to test stability first */
@@ -50,6 +48,20 @@ tsdesc* sc_init(double* T, int n, int m){
 }
 
 
+matrixProfileObj* mp_init(int n, int m){
+    matrixProfileObj* matp = malloc(sizeof(matrixProfileObj));
+    if(matp != NULL){
+        matp->mp = malloc((n-m+1)*sizeof(double));
+        matp->mpI = malloc((n-m+1)*sizeof(double));
+        if(matp->mp == NULL || matp->mpI == NULL){
+            free(matp->mp);
+            free(matp->mpI);
+            free(matp);
+            matp = NULL;
+        }
+    }
+    return matp;
+}
 
 /*
  * We can add a correction to get the count considering diagonals only over the upper triangular portion.
@@ -103,7 +115,7 @@ void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
         M = incM(M,T[i],i+1);
     }
     mu[0] = M;
-    sigmaInv[0] = sqrt(m/Q);
+    sigmaInv[0] = sqrt(Q/m);
     for(int i = 0; i < n-m; i+=m){
         int w = (i < n-2*m+1)? i+m : n-m;
         double Q_prev = Q;
@@ -120,7 +132,7 @@ void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
             Q_prev = incS(Q_prev,M_prev,T[j+m],m);
             M_prev = incM(M_prev,T[j+m],m);
             mu[j+1] = M_prev;
-            sigmaInv[j+1] = sqrt(m/Q_prev);
+            sigmaInv[j+1] = sqrt(Q_prev/m);
         }
 
     }
@@ -129,41 +141,33 @@ void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
 
 /* These "effectively" add and remove terms from mean and sume of products calculations. */
 /* C means data is already centered.*/
-static double decCM(double M, double x, double invkk, int k){
-    return (k*M-x)*invkk;
+
+
+static double decCM(double M, double x,  int m){
+    return (m*M-x)/(m-1);
 }
 
-static double incCM(double M, double x, double invk){
-    return M + x*invk;
+static double incCM(double M, double x, double m){
+    return M + x/m;
 }
 
-static double decCSxy(double Sxy, double x, double y, double kkinvk){
-    return Sxy - x*y*kkinvk;
+static double decCSxy(double Sxy, double x, double y, double m){
+    return Sxy - x*y*(m-1)/m;
 }
 
-
-/* M here indicates the mean of k-1 values, not k values. You can just decrement M first*/
-static double incCSxy(double Sxy, double x, double y, double kkinvk){
-   return Sxy + x*y*kkinvk;
+static double incCSxy(double Sxy, double x, double y, double m){
+   return Sxy + x*y*(m-1)/m;
 }
 
-
-
-/* The base/offset part is annoying, but its used to correctly set the index*/
-/* At a high level, this is a somewhat optimized sum of squares formula, used to estimate the normalized difference between subsequences as a function of their correlation*/
-/* I should probably precompute these constants and just pass a struct, depending on whether the compiler behaves*/
 void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, double Mx, double My, int n, int m, int base, int lag){
     double Sxy = 0;
     double Cxy = sigmaInv[0]*sigmaInv[lag];
-    double invm = (double)1/m;
-    double invmm = (double)(1/(m-1));
-    double mminv = (double)(m-1)/m;
 
-    for(int i = 0; i < m; i++){ 
+    for(int i = 0; i < m; i++){
         Sxy += (T[i]-Mx)*(T[i+lag]-My);
     }
     Cxy *=  Sxy;
-    if(mp[0] < Cxy){  /* Branching tends to be faster than unnecessary writes here */
+    if(mp[0] < Cxy){
         mp[0] = Cxy;
         mpI[0] = base+lag;
     }
@@ -174,17 +178,17 @@ void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, doub
     for(int i = 0; i < n-m-lag; i++){
         Cxy = sigmaInv[i+1]*sigmaInv[i+lag+1];
 
-        Mx = decCM(Mx,T[i],invmm,m);
-        My = decCM(My,T[i+lag],invmm,m);
+        Mx = decCM(Mx,T[i],m);
+        My = decCM(My,T[i+lag],m);
 
         double x = T[i+m] - Mx;
         double y = T[i+m+lag] - My;
 
-        Sxy = incCSxy(Sxy,x,y,invmm);
-        Cxy *= Sxy;
+        Sxy = incCSxy(Sxy,x,y,m);
+        Cxy /= Sxy;
 
-        Mx = incCM(Mx,x,invm);
-        My = incCM(My,y,invm);
+        Mx = incCM(Mx,x,m);
+        My = incCM(My,y,m);
 
         if(mp[i+1] < Cxy){
             mp[i+1] = Cxy;
@@ -195,6 +199,7 @@ void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, doub
             mpI[i+lag+1] = i+base;
         }
     }
+
 }
 
 

@@ -1,12 +1,13 @@
 #ifndef SCR
 #define SCR
 
-truct mpStats{
-    const double* T;
+struct desc{
+    double* T;
     double* mu;
-    double* sigma;
+    double* sigmaInv;
     int n;
     int m;
+    int chsz;
 };
 
 struct mpObj{
@@ -15,17 +16,17 @@ struct mpObj{
 };
 
 
-typedef struct mpStats tsdesc;
+typedef struct desc tsdesc;
 typedef struct mpObj matrixProfileObj;
 
 
-int iterCnt(int* x, int xOffs, int n, double perc);
+int iterCnt(int* x, int xOffs, int n, int m, double perc);
 
 void winmeansig(const double* T, double* mu, double* sigma, int n, int m);
 
-void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, 
+void mpSelf(const double* T, const double* mu, const double* sigma, double* mp, int* mpI, int n, int m, int lag); 
 
-tsdesc* sc_init(const double* T, int n, int m);
+tsdesc* sc_init(double* T, int n, int m);
 
 matrixProfileObj* mp_init(int n, int m);
 
