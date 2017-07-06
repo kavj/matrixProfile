@@ -156,18 +156,20 @@ static double incCSxy(double Sxy, double x, double y, double m){
 void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, double Mx, double My, int n, int m, int base, int lag){
     double Sxy = 0;
     double Cxy = sigmaInv[0]*sigmaInv[lag];
-    //printf("Mx: %lf My: %lf lag: %d \n",Mx,My,lag);
     for(int i = 0; i < m; i++){
         Sxy += (T[i]-Mx)*(T[i+lag]-My);
     }
-
+    printf("m: %d base: %d lag: %d \n", m, base, lag);
+    printf("Sigma product: %lf, Mx: %lf, My: %lf",Sxy,Mx,My);
 
     Cxy = Sxy/Cxy;
+    printf("Cxy:%lf\n",Cxy);
+    sleep(1);
     if(mp[0] < Cxy){
         mp[0] = Cxy;
         mpI[0] = base+lag;
     }
-    if(mp[base+lag] < Cxy){
+    if(mp[lag] < Cxy){
         mp[lag] = Cxy;
         mpI[lag] = base;
     }
@@ -208,7 +210,7 @@ void corrToDist(double* mp, int n, int m){
     }
 }
 
-static inline void scSetupBlock(double* T, double* mu,  double* sigmaInv, double* mp, int* mpI, int n, int m, int lag, int offset){
+static inline void scSetupBlock(double* T, double* sigmaInv, double* mu, double* mp, int* mpI, int n, int m, int offset, int lag){
    int k = chunkSz < n - offset ? chunkSz : n - offset;
    sccomp(&T[offset],&sigmaInv[offset],&mp[offset],&mpI[offset],mu[offset],mu[offset+lag],k,m,offset,lag);
 }
@@ -220,7 +222,7 @@ void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
     for(int i = 0; i < n; i+= chunkSz){       
         int lag = m;
         while(lag < n-i-m){
-            scSetupBlock(t->T,t->mu,t->sigmaInv,matp->mp,matp->mpI,n,m,lag,i);
+            scSetupBlock(t->T,t->sigmaInv,t->mu,matp->mp,matp->mpI,n,m,i,lag);
             lag++;
         }
        // printf("lag: %d\n",lag);
