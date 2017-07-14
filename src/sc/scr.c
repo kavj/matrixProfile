@@ -79,127 +79,83 @@ int iterCnt(int* x, int xOffs, int n, int m, double perc){
     return k;
 }
 
-static double decM(double M, double x, int k){
-    return (k*M-x)/(k-1);
+
+static double shiftMean(double mu, double a, double b, double m){
+    return M + dMu/m;
 }
 
-static double incM(double M, double x, int k){
-    return M + (x-M)/k;
+static double incrementMean(double mu, double a, double m){
+    return mu + (a - mu)/m;
 }
 
-static double decS(double S, double M, double x, int k){
-    return S - (k-1)*(x-M)*(x-M)/k;
+static double shiftSSS(double s, double mu, double mup, double a, double ap){
+    return s + ((a - mu) * (a - mup) - (ap - mu) * (ap - mup));
+}
+
+static double twoPassSSkern(double s, double a, double mu){
+    return s + (a - mu)*(a - mu);
 }
 
 
-/* M here indicates the mean of k-1 values, not k values. You can just decrement M first*/
-static double incS(double S, double M, double x, int k){
-    return S + (k-1)*(x-M)*(x-M)/k;
+static double initSS(const double* T, double M, int m, int offset){
+    double s = 0;
+    for(int i = offset+1; i < offset + m; i++){
+        twoPassSSkern(s,T[i],M);
+    }
+    return s;
 }
 
+static double initMean(const double* T, int m, int offset){
+    double M = T[offset];
+    for(int i = offset+1, i < offset+m; i++){
+        M = incrementMean(M,T[i],i-offset+1);
+    }
+}
+
+
+// interpolate m-1 additional spots
+static void wmsInterpKern(const double* T, double* mu, double* sigmaInv, int n, int m, int offset){
+
+}
 
 /* This uses a variation on Welford's method for sample variance to compute the mean and standard deviation. 
  * It resets the summation once the term under consideration does not share any terms with the last exact summation. */
 /* This should check for exceptions*/
+/* I should make this clear somewhere that this isn't a full standard deviation function. It could be refactored into one,
+ * but it should preserve the m factor difference given that this is used to cancel another similar factor */
 void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
-    double M = T[0];
-    double Q = 0;
-    for(int i = 1; i < m; i++){
-        Q = incS(Q,M,T[i],i+1);
-        M = incM(M,T[i],i+1);
-    }
-    mu[0] = M;
-    sigmaInv[0] = sqrt(Q/m);
-    for(int i = 0; i < n-m; i+=m){
-        int w = (i < n-2*m+1)? i+m : n-m;
-        double Q_prev = Q;
-        double M_prev = M;
-        Q = 0;
-        M = T[i+m];
-        for(int j = i; j < w; j++){
-            if(j != i){
-                Q = incS(Q,M,T[j+m],j-i+1);
-                M = incM(M,T[j+m],j-i+1);
-            }
-            M_prev = decM(M_prev,T[j],m);
-            Q_prev = decS(Q_prev,M_prev,T[j],m);
-            Q_prev = incS(Q_prev,M_prev,T[j+m],m);
-            M_prev = incM(M_prev,T[j+m],m);
-            mu[j+1] = M_prev;
-            sigmaInv[j+1] = sqrt(Q_prev/m);
+ 
+    int alignedBound = (n-m+1) - (n-m+1) % m;
+    sigmaInv(0) = s;
+    for(int i = 0; i < alignedBound; i += m){
+        double M = initMean(T,m,i);
+        double s = initSS(T,M,m,i);
+        mu[i] = M;
+        sigmaInv[i] = sqrt(1/s);
+        for(int j = i+1; j < i+m; j++){
+            double Mprev = M;
+            M = shiftMean(M,T[j+m-1],T[j-1]);
+            s = shiftSSS(s,M,Mprev,T[j+m-1],T[j-1]);
+            mu[j] = M;
+            sigmaInv[j] = sqrt(1/s);
         }
-
     }
+    /* compute unaligned portion */
+    double M = initMean(T,m,alignedBound);
+    double s = initSS(T,M,m,alignedBound);
+    mu[alignedBound] = M;
+    sigmaInv[alignedBound] = sqrt(1/s);
+    for(int i = alignedBound+1; i < n-m+1; i++){
+        double Mprev = M;
+        M = shiftMean(M,T[i],T[i-1]);
+        s = shiftSSS(s,M,Mprev,T[i+m-1],T[i-1]);
+        mu[i] = M;
+        sigmaInv[i] = sqrt(1/s);
+    } 
 }
 
-
-/* These "effectively" add and remove terms from mean and sume of products calculations. */
-/* C means data is already centered.*/
-
-
-static double decCM(double M, double x,  int m){
-    return (m*M-x)/(m-1);
-}
-
-static double incCM(double M, double x, double m){
-    return M + x/m;
-}
-
-static double decCSxy(double Sxy, double x, double y, double m){
-    return Sxy - x*y*(m-1)/m;
-}
-
-static double incCSxy(double Sxy, double x, double y, double m){
-   return Sxy + x*y*(m-1)/m;
-}
 
 void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, double Mx, double My, int n, int m, int base, int lag){
-    double Sxy = 0;
-    double Cxy = sigmaInv[0]*sigmaInv[lag];
-    for(int i = 0; i < m; i++){
-        Sxy += (T[i]-Mx)*(T[i+lag]-My);
-    }
-    printf("m: %d base: %d lag: %d \n", m, base, lag);
-    printf("Sigma product: %lf, Mx: %lf, My: %lf",Sxy,Mx,My);
-
-    Cxy = Sxy/Cxy;
-    printf("Cxy:%lf\n",Cxy);
-    sleep(1);
-    if(mp[0] < Cxy){
-        mp[0] = Cxy;
-        mpI[0] = base+lag;
-    }
-    if(mp[lag] < Cxy){
-        mp[lag] = Cxy;
-        mpI[lag] = base;
-    }
-    for(int i = 0; i < n-m-lag; i++){
-        Cxy = sigmaInv[i+1]*sigmaInv[i+lag+1];
-        double x = T[i];
-        double y = T[i+lag];
-        
-        Mx = decCM(Mx,x,m);
-        My = decCM(My,y,m);
-        Sxy = decCSxy(Sxy,x-Mx,y-My,m);
-        x = T[i+m] - Mx;
-        y = T[i+m+lag] - My;
-  
-
-        Sxy = incCSxy(Sxy,x,y,m);
-        Cxy = Sxy/Cxy/m;
-
-        Mx = incCM(Mx,x,m);
-        My = incCM(My,y,m);
-
-        if(mp[i+1] < Cxy){
-            mp[i+1] = Cxy;
-            mpI[i+1] = i+base+lag;
-        }
-        if(mp[i+lag+1] < Cxy){
-            mp[i+lag+1] = Cxy;
-            mpI[i+lag+1] = i+base;
-        }
-    }
 
 }
 
@@ -211,8 +167,7 @@ void corrToDist(double* mp, int n, int m){
 }
 
 static inline void scSetupBlock(double* T, double* sigmaInv, double* mu, double* mp, int* mpI, int n, int m, int offset, int lag){
-   int k = chunkSz < n - offset ? chunkSz : n - offset;
-   sccomp(&T[offset],&sigmaInv[offset],&mp[offset],&mpI[offset],mu[offset],mu[offset+lag],k,m,offset,lag);
+
 }
 
 void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
@@ -225,7 +180,6 @@ void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
             scSetupBlock(t->T,t->sigmaInv,t->mu,matp->mp,matp->mpI,n,m,i,lag);
             lag++;
         }
-       // printf("lag: %d\n",lag);
     }
 }
 
