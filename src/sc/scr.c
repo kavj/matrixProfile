@@ -10,6 +10,8 @@
 /* allocate memory and setup structures */
 /* still in debate whether I should overload this for single precision. I need to test stability first */
 
+
+/* constructor for a 1D time series descriptor. */
 tsdesc* sc_init(double* T, int n, int m){
     tsdesc* t = (tsdesc*)malloc(sizeof(tsdesc));
     if(t != NULL){
@@ -28,6 +30,8 @@ tsdesc* sc_init(double* T, int n, int m){
     return t;
 }
 
+
+/* somewhat generic 1D Matrix Profile Constructor*/
 matrixProfileObj* mp_init(int n, int m){
     matrixProfileObj* matp = malloc(sizeof(matrixProfileObj));
     if(matp != NULL){
@@ -96,7 +100,6 @@ static double twoPassSSkern(double s, double a, double mu){
     return s + (a - mu)*(a - mu);
 }
 
-
 static double initSS(const double* T, double M, int m, int offset){
     double s = 0;
     for(int i = offset+1; i < offset + m; i++){
@@ -113,8 +116,20 @@ static double initMean(const double* T, int m, int offset){
 }
 
 
-// interpolate m-1 additional spots
-static void wmsInterpKern(const double* T, double* mu, double* sigmaInv, int n, int m, int offset){
+// helper function to interpolate additional points
+static void muSigInterp(const double* T, double* mu, double* SS, int m, int offset){
+    double M = mu[offset];
+    double s = SS[offset];  
+    for(int i = offset+1; i < offset + m; i++){
+        double Mprev = M;
+        M = shiftMean(M,T[i+m-1],T[i-1]);
+        s = shiftSSS(s,M,Mprev,T[i+m-1],T[i-1]);
+        mu[i]= M;
+        SS[i]= s;
+    }
+}
+
+static void covarInterp(){
 
 }
 
@@ -124,38 +139,34 @@ static void wmsInterpKern(const double* T, double* mu, double* sigmaInv, int n, 
 /* I should make this clear somewhere that this isn't a full standard deviation function. It could be refactored into one,
  * but it should preserve the m factor difference given that this is used to cancel another similar factor */
 void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
- 
     int alignedBound = (n-m+1) - (n-m+1) % m;
     sigmaInv(0) = s;
     for(int i = 0; i < alignedBound; i += m){
         double M = initMean(T,m,i);
         double s = initSS(T,M,m,i);
         mu[i] = M;
-        sigmaInv[i] = sqrt(1/s);
-        for(int j = i+1; j < i+m; j++){
-            double Mprev = M;
-            M = shiftMean(M,T[j+m-1],T[j-1]);
-            s = shiftSSS(s,M,Mprev,T[j+m-1],T[j-1]);
-            mu[j] = M;
-            sigmaInv[j] = sqrt(1/s);
+        sigmaInv[i] = s;
+        muSigInterp(T,mu,sigmaInv,m,i);
+        for(int j = i; j < i+m; j++){
+            sigmaInv[i] = 1/sqrt(sigmaInv[i]);
         }
     }
     /* compute unaligned portion */
     double M = initMean(T,m,alignedBound);
     double s = initSS(T,M,m,alignedBound);
     mu[alignedBound] = M;
-    sigmaInv[alignedBound] = sqrt(1/s);
-    for(int i = alignedBound+1; i < n-m+1; i++){
-        double Mprev = M;
-        M = shiftMean(M,T[i],T[i-1]);
-        s = shiftSSS(s,M,Mprev,T[i+m-1],T[i-1]);
-        mu[i] = M;
-        sigmaInv[i] = sqrt(1/s);
-    } 
+    sigmaInv[alignedBound] = s;
+    muSigInterp(T,mu,sigmaInv,n-m-alignedBound+1,alignedBound);
+    for(int j = alignedBound; j < n-m+1; j++){
+        sigmaInv[j] = 1/sqrt(sigmaInv[j]);
+    }
 }
 
 
-void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, double Mx, double My, int n, int m, int base, int lag){
+void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, double Mx, double My, int k, int m, int base, int lag){
+    for(int i = base; i < k; i += m){
+        double corr = twoPass
+    } 
 
 }
 
