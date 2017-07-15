@@ -96,6 +96,10 @@ static double shiftSSS(double s, double mu, double muprev, double x, double xpre
     return s + ((x - mu) * (x - muprev) - (xprev - mu) * (xprev - muprev));
 }
 
+static double shiftSXY(double x, double y, double xprev, double yprev, double mux, double muyprev){
+    return (x - mux)*(y - muyprev) - (xprev - mux)*(yprev - muyprev);
+}
+
 static double initSS(const double* T, double M, int m, int offset){
     double s = 0;
     for(int i = offset; i < offset + m; i++){
@@ -134,8 +138,11 @@ static void muSigInterp(const double* T, double* mu, double* SS, int m, int offs
     }
 }
 
-static void covarInterp(){
-
+static void covarInterpStep(const double* X, const double* Y, const double* mux, const double* muy, const double* sx, const double* sy, double* C, int m, int ct){
+    double c = C[0];
+    for(int i = 0; i < ct; i++){
+        c += ShiftSXY(T[i*m],T[i*m+lag-1],T[i],T[i+lag],mux[i]muy[i+lag]);
+    }
 }
 
 /* This uses a variation on Welford's method for sample variance to compute the mean and standard deviation. 
@@ -178,9 +185,14 @@ static void sccomp(const double* T, const double* mu, const double* sigmaInv, do
 
     int count        = blockFn - blockSt + 1;
     int alignedCount = count/winLen;
-
-    for(int i = blockSt; i < alignedCount; i++){
+ 
+    for(int i = 0; i < alignedCount; i++){
+        double Sxy = centeredSS(&T[blockSt],&T[blockSt+lag]);
+        int j = i*count;
         
+        for(int k = j; k < j+winLen; k++){
+            
+        }
     }
     if(alignedCount*winLen < count){
         
