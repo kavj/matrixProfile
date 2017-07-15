@@ -85,7 +85,7 @@ int iterCnt(int* x, int xOffs, int n, int m, double perc){
 
 
 static double shiftMean(double mu, double a, double b, double m){
-    return M + dMu/m;
+    return mu + (a-b)/m;
 }
 
 static double incrementMean(double mu, double a, double m){
@@ -97,7 +97,7 @@ static double shiftSSS(double s, double mu, double mup, double a, double ap){
 }
 
 static double twoPassSSkern(double s, double a, double mu){
-    return s + (a - mu)*(a - mu);
+    return s + (a - mu) * (a - mu);
 }
 
 static double initSS(const double* T, double M, int m, int offset){
@@ -108,9 +108,10 @@ static double initSS(const double* T, double M, int m, int offset){
     return s;
 }
 
+
 static double initMean(const double* T, int m, int offset){
     double M = T[offset];
-    for(int i = offset+1, i < offset+m; i++){
+    for(int i = offset+1; i < offset+m; i++){
         M = incrementMean(M,T[i],i-offset+1);
     }
 }
@@ -122,7 +123,7 @@ static void muSigInterp(const double* T, double* mu, double* SS, int m, int offs
     double s = SS[offset];  
     for(int i = offset+1; i < offset + m; i++){
         double Mprev = M;
-        M = shiftMean(M,T[i+m-1],T[i-1]);
+        M = shiftMean(M,T[i+m-1],T[i-1],m);
         s = shiftSSS(s,M,Mprev,T[i+m-1],T[i-1]);
         mu[i]= M;
         SS[i]= s;
@@ -138,14 +139,17 @@ static void covarInterp(){
 /* This should check for exceptions*/
 /* I should make this clear somewhere that this isn't a full standard deviation function. It could be refactored into one,
  * but it should preserve the m factor difference given that this is used to cancel another similar factor */
-void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
+void winmeansigInv(const double* T, double* mu, double* sigmaInv, int n, int m){
+
     int alignedBound = (n-m+1) - (n-m+1) % m;
-    sigmaInv(0) = s;
+
     for(int i = 0; i < alignedBound; i += m){
-        double M = initMean(T,m,i);
-        double s = initSS(T,M,m,i);
-        mu[i] = M;
+
+        double M    = initMean(T,m,i);
+        double s    = initSS(T,M,m,i);
+        mu[i]       = M;
         sigmaInv[i] = s;
+
         muSigInterp(T,mu,sigmaInv,m,i);
         for(int j = i; j < i+m; j++){
             sigmaInv[i] = 1/sqrt(sigmaInv[i]);
@@ -162,12 +166,17 @@ void winmeansig(const double* T, double* mu, double* sigmaInv, int n, int m){
     }
 }
 
-
-void  sccomp(const double* T, const double* sigmaInv, double* mp, int* mpI, double Mx, double My, int k, int m, int base, int lag){
-    for(int i = base; i < k; i += m){
-        double corr = twoPass
-    } 
-
+void sccomp(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int winLen, int blockSt, int blockFn, int lag){
+    int count = blockFn - blockSt + 1;
+    int alignedCount =  count/m;
+    for(int i = base; i < alignedCount; i++){
+        
+    }
+    if(alignedCount*m < count){
+        
+    }
+    // two pass method
+    //for(int i = alignedBound; i < blockFn - lag - m + 1; 
 }
 
 
@@ -177,20 +186,27 @@ void corrToDist(double* mp, int n, int m){
     }
 }
 
-static inline void scSetupBlock(double* T, double* sigmaInv, double* mu, double* mp, int* mpI, int n, int m, int offset, int lag){
-
+// In other functions I take n to be the length of the array itself.
+// I used max offset here, because this is a block solver. This should be made clearer.
+void scBlockSetup(tsdesc* t, matrixProfileObj* matp, int blockSt, int blockFn){
+    for(int lag = 0; lag < blockFn-m; lag++){
+        sccomp(t->T,t->mu,t->sigmaInv,matp->mp,matp->mpI,t->m,blockSt,blockFn,lag);
+    }
 }
 
+
 void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
-    int m = t->m;
-    int n = t->n;
-    printf("base n: %d\n",n);
-    for(int i = 0; i < n; i+= chunkSz){       
-        int lag = m;
-        while(lag < n-i-m){
-            scSetupBlock(t->T,t->sigmaInv,t->mu,matp->mp,matp->mpI,n,m,i,lag);
-            lag++;
-        }
+
+    int minlag  = m;
+    int count   = t->n-minlag-t->m+1;
+    int step    = chunkSz - t->m + 1;
+    int aligned = count/step;
+
+    for(int base = 0; base < aligned; base += step){   // minimum lag is implicitly m. It might be better to be explicit about this in case of later changes.
+        scBlockCompute(t, matp, base, base+chunkSz-1);
+    }
+    if (aligned*step < count){
+        
     }
 }
 
