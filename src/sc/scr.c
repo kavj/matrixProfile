@@ -92,20 +92,24 @@ static double incrementMean(double mu, double a, double m){
     return mu + (a - mu)/m;
 }
 
-static double shiftSSS(double s, double mu, double mup, double a, double ap){
-    return s + ((a - mu) * (a - mup) - (ap - mu) * (ap - mup));
-}
-
-static double twoPassSSkern(double s, double a, double mu){
-    return s + (a - mu) * (a - mu);
+static double shiftSSS(double s, double mu, double muprev, double x, double xprev){
+    return s + ((x - mu) * (x - muprev) - (xprev - mu) * (xprev - muprev));
 }
 
 static double initSS(const double* T, double M, int m, int offset){
     double s = 0;
-    for(int i = offset+1; i < offset + m; i++){
-        twoPassSSkern(s,T[i],M);
+    for(int i = offset; i < offset + m; i++){
+        s += (T[i] - M) * (T[i] - M);
     }
     return s;
+}
+
+static double centeredSS(const double* X, const double* Y, double Mx, double My, int winLen){
+    double sxy = 0;
+    for(int i = 0; i < winLen; i++){
+        sxy += (X[i] - Mx)*(Y[i] - My);
+    }
+    return sxy;
 }
 
 
@@ -139,7 +143,7 @@ static void covarInterp(){
 /* This should check for exceptions*/
 /* I should make this clear somewhere that this isn't a full standard deviation function. It could be refactored into one,
  * but it should preserve the m factor difference given that this is used to cancel another similar factor */
-void winmeansigInv(const double* T, double* mu, double* sigmaInv, int n, int m){
+static void winmeansigInv(const double* T, double* mu, double* sigmaInv, int n, int m){
 
     int alignedBound = (n-m+1) - (n-m+1) % m;
 
@@ -151,28 +155,34 @@ void winmeansigInv(const double* T, double* mu, double* sigmaInv, int n, int m){
         sigmaInv[i] = s;
 
         muSigInterp(T,mu,sigmaInv,m,i);
+
         for(int j = i; j < i+m; j++){
             sigmaInv[i] = 1/sqrt(sigmaInv[i]);
         }
     }
+
     /* compute unaligned portion */
-    double M = initMean(T,m,alignedBound);
-    double s = initSS(T,M,m,alignedBound);
-    mu[alignedBound] = M;
+    double M               = initMean(T,m,alignedBound);
+    double s               = initSS(T,M,m,alignedBound);
+    mu[alignedBound]       = M;
     sigmaInv[alignedBound] = s;
+
     muSigInterp(T,mu,sigmaInv,n-m-alignedBound+1,alignedBound);
+
     for(int j = alignedBound; j < n-m+1; j++){
         sigmaInv[j] = 1/sqrt(sigmaInv[j]);
     }
 }
 
-void sccomp(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int winLen, int blockSt, int blockFn, int lag){
-    int count = blockFn - blockSt + 1;
-    int alignedCount =  count/m;
-    for(int i = base; i < alignedCount; i++){
+static void sccomp(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int winLen, int blockSt, int blockFn, int lag){
+
+    int count        = blockFn - blockSt + 1;
+    int alignedCount = count/winLen;
+
+    for(int i = blockSt; i < alignedCount; i++){
         
     }
-    if(alignedCount*m < count){
+    if(alignedCount*winLen < count){
         
     }
     // two pass method
@@ -180,7 +190,7 @@ void sccomp(const double* T, const double* mu, const double* sigmaInv, double* m
 }
 
 
-void corrToDist(double* mp, int n, int m){
+static void corrToDist(double* mp, int n, int m){
     for(int i = 0; i < n-m+1; i++){
         mp[i] = sqrt(2*m*(1-mp[i]));
     }
@@ -188,8 +198,8 @@ void corrToDist(double* mp, int n, int m){
 
 // In other functions I take n to be the length of the array itself.
 // I used max offset here, because this is a block solver. This should be made clearer.
-void scBlockSetup(tsdesc* t, matrixProfileObj* matp, int blockSt, int blockFn){
-    for(int lag = 0; lag < blockFn-m; lag++){
+static void scBlockSetup(tsdesc* t, matrixProfileObj* matp, int blockSt, int blockFn){
+    for(int lag = 0; lag < blockFn - t->m; lag++){
         sccomp(t->T,t->mu,t->sigmaInv,matp->mp,matp->mpI,t->m,blockSt,blockFn,lag);
     }
 }
@@ -197,13 +207,13 @@ void scBlockSetup(tsdesc* t, matrixProfileObj* matp, int blockSt, int blockFn){
 
 void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
 
-    int minlag  = m;
-    int count   = t->n-minlag-t->m+1;
+    int minlag  = t->m;
+    int count   = t->n - minlag - t->m + 1;
     int step    = chunkSz - t->m + 1;
     int aligned = count/step;
 
     for(int base = 0; base < aligned; base += step){   // minimum lag is implicitly m. It might be better to be explicit about this in case of later changes.
-        scBlockCompute(t, matp, base, base+chunkSz-1);
+        scBlockSetup(t, matp, base, base+chunkSz-1);
     }
     if (aligned*step < count){
         
