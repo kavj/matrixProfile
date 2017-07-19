@@ -63,12 +63,6 @@ void mp_destroy(matrixProfileObj* matp){
     free(matp);
 }
 
-
-/*
- * We can add a correction to get the count considering diagonals only over the upper triangular portion.
- * We need a global bound. 
- * 
- */
 int iterCnt(int* x, int xOffs, int n, int m, double perc){
     int w = n - m + 1;
     long numReq = (int)ceil(((double)(w*(w+1)/2))*perc);
@@ -125,27 +119,18 @@ static double initMean(const double* T, int m, int offset){
     return M;
 }
 
-
-static void covarInterpStep(const double* X, const double* Y, const double* mux, const double* muy, const double* sx, const double* sy, double* C, int m, int ct){
-    double c = C[0];
-    for(int i = 0; i < ct; i++){
-       // c += shiftSXY(T[i*m],T[i*m+lag-1],T[i],T[i+lag],mux[i]muy[i+lag]);
-    }
-}
-
 /* This uses a variation on Welford's method for sample variance to compute the mean and standard deviation. 
  * It resets the summation once the term under consideration does not share any terms with the last exact summation. */
 /* This should check for exceptions*/
 /* I should make this clear somewhere that this isn't a full standard deviation function. It could be refactored into one,
  * but it should preserve the m factor difference given that this is used to cancel another similar factor */
 void winmeansig(const double* T, double* mu, double* sigma, int n, int m,int normConstant){
-
     int alignedBound = (n-m+1) - (n-m+1) % m;
-    printf("n: %d m: %d aligned: %d",n,m,alignedBound);
+    //printf("n: %d m: %d aligned: %d",n,m,alignedBound);
     for(int i = 0; i < alignedBound; i += m){
         double M    = initMean(T,m,i);
         double s    = initSS(T,M,m,i);
-        printf("%lf\n",M);
+        //printf("%lf\n",M);
         mu[i]       = M;
         sigma[i]    = sqrt(s/normConstant);   
 
@@ -169,26 +154,6 @@ void winmeansig(const double* T, double* mu, double* sigma, int n, int m,int nor
     }
 }
 
-static void sccomp(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int winLen, int blockSt, int blockFn, int lag){
-
-    int count        = blockFn - blockSt + 1;
-    int alignedCount = count/winLen;
- 
-    for(int i = 0; i < alignedCount; i++){
-       // double Sxy = centeredSS(&T[blockSt],&T[blockSt+lag]);
-        int j = i*count;
-        
-        for(int k = j; k < j+winLen; k++){
-            
-        }
-    }
-    if(alignedCount*winLen < count){
-        
-    }
-    // two pass method
-    //for(int i = alignedBound; i < blockFn - lag - m + 1; 
-}
-
 
 static void corrToDist(double* mp, int n, int m){
     for(int i = 0; i < n-m+1; i++){
@@ -196,28 +161,69 @@ static void corrToDist(double* mp, int n, int m){
     }
 }
 
-// In other functions I take n to be the length of the array itself.
-// I used max offset here, because this is a block solver. This should be made clearer.
-static void scBlockSetup(tsdesc* t, matrixProfileObj* matp, int blockSt, int blockFn){
-    for(int lag = 0; lag < blockFn - t->m; lag++){
-        sccomp(t->T,t->mu,t->sigmaInv,matp->mp,matp->mpI,t->m,blockSt,blockFn,lag);
+static void computeBlock(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int n, int m, int base, int offset){
+    double Mx = mu[base];
+    double My = mu[offset];
+    double covxy = centeredSS(&T[base],&T[offset],Mx,My,m);
+    double corrxy = covxy*sigmaInv[base]*sigmaInv[offset];
+    int upperBound = (chunkSz - m + 1) < (n - m - offset + 1) ? (chunkSz - m + 1) : (n - m - offset + 1);
+    if(mp[base] < corrxy){
+        mp[base]  = corrxy;
+        mpI[base] = offset;
+    }
+    if(mp[offset] < corrxy){
+        mp[offset]  = corrxy;
+        mpI[offset] = base;
+    }
+    for(int i = 1; i < n - offset - m + 1; i++){        
+        double Myprev = My;
+        Mx = mu[base+i];
+        My = mu[offset+i];
+        covxy = shiftSXY(T[base+i+m-1],T[offset+i+m-1],T[base+i-1],T[offset+i-1],Mx,Myprev);
+        corrxy = covxy*sigmaInv[base+i]*sigmaInv[offset+i];
+        if(mp[base+i] < corrxy){
+            mp[base+i]  = corrxy;
+            mpI[base+i] = offset + i;
+        }
+        if(mp[offset+i] < corrxy){
+            mp[offset+i]  = corrxy;
+            mpI[offset+i] = base + i;
+        }   
     }
 }
 
 
-void scBlockSolver(tsdesc* t, matrixProfileObj* matp){
+static void blockupdateED(tsdesc* t, matrixProfileObj* matp, int blockSt, int blockLen){
+    int minlag = t->m;
+    int count  = t->n - t->m + 1;
+    double* T = t->T;
+    double* sigmaInv = t->sigmaInv;
+    for(int offs = blockSt + minlag; offs < count-t->m; offs++){ // t->m here is debug code
+       computeBlock(T,t->mu,sigmaInv,matp->mp,matp->mpI,t->n,t->m,blockSt,chunkSz);
+    }
+}
+
+
+void sjbs(tsdesc* t, matrixProfileObj* matp){
 
     int minlag  = t->m;
     int count   = t->n - minlag - t->m + 1;
     int step    = chunkSz - t->m + 1;
-    int aligned = count/step;
-
-    for(int base = 0; base < aligned; base += step){   // minimum lag is implicitly m. It might be better to be explicit about this in case of later changes.
-        scBlockSetup(t, matp, base, base+chunkSz-1);
+    int aligned = t->n - t->n%chunkSz;
+ 
+    for(int base = 0; base < aligned; base += step){
+        blockupdateED(t,matp,base,chunkSz);
     }
-    if (aligned*step < count){
-        
+    if(aligned < count){
+        blockupdateED(t,matp,aligned,t->n-aligned+1);
     }
+    corrToDist(matp->mp,t->n,t->m);
 }
 
-
+/* This is the anytime version */
+void mpIndexBlkSolver(tsdesc* t, matrixProfileObj* matp, int* permI, int strt, int perc){
+// get the number of indices required.
+// sort indices
+// call block solve for each index
+// finish writing this at some point 
+}

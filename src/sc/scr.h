@@ -34,6 +34,9 @@ void sc_destroy(tsdesc* T);
 
 void mp_destroy(matrixProfileObj* matp);
 
+
+void sjbs(tsdesc* t, matrixProfileObj* matp);
+
 //void corrToDist(double* mp, int n, int m);
 
 
