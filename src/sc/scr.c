@@ -141,18 +141,20 @@ static void covarInterpStep(const double* X, const double* Y, const double* mux,
 void winmeansig(const double* T, double* mu, double* sigma, int n, int m,int normConstant){
 
     int alignedBound = (n-m+1) - (n-m+1) % m;
-
+    printf("n: %d m: %d aligned: %d",n,m,alignedBound);
     for(int i = 0; i < alignedBound; i += m){
         double M    = initMean(T,m,i);
         double s    = initSS(T,M,m,i);
+        printf("%lf\n",M);
         mu[i]       = M;
         sigma[i]    = sqrt(s/normConstant);   
 
         for(int j = i+1; j < i+m; j++){
             double Mprev = M;
             M        = shiftMean(M,T[j+m-1],T[j-1],m);
-            s        = shiftSSS(s,M,Mprev,T[i+m-1],T[i-1]);
-            sigma[i] = sqrt(s/normConstant);
+            s        = shiftSSS(s,M,Mprev,T[j+m-1],T[j-1]);
+            mu[j]    = M;
+            sigma[j] = sqrt(s/normConstant);
         }
 
     }
