@@ -122,21 +122,9 @@ static double initMean(const double* T, int m, int offset){
     for(int i = offset+1; i < offset+m; i++){
         M = incrementMean(M,T[i],i-offset+1);
     }
+    return M;
 }
 
-
-// helper function to interpolate additional points
-static void muSigInterp(const double* T, double* mu, double* SS, int m, int offset){
-    double M = mu[offset];
-    double s = SS[offset];  
-    for(int i = offset+1; i < offset + m; i++){
-        double Mprev = M;
-        M = shiftMean(M,T[i+m-1],T[i-1],m);
-        s = shiftSSS(s,M,Mprev,T[i+m-1],T[i-1]);
-        mu[i]= M;
-        SS[i]= s;
-    }
-}
 
 static void covarInterpStep(const double* X, const double* Y, const double* mux, const double* muy, const double* sx, const double* sy, double* C, int m, int ct){
     double c = C[0];
@@ -150,38 +138,33 @@ static void covarInterpStep(const double* X, const double* Y, const double* mux,
 /* This should check for exceptions*/
 /* I should make this clear somewhere that this isn't a full standard deviation function. It could be refactored into one,
  * but it should preserve the m factor difference given that this is used to cancel another similar factor */
-void winmeansig(const double* T, double* mu, double* sigma, int n, int m,int scaleFactor){
+void winmeansig(const double* T, double* mu, double* sigma, int n, int m,int normConstant){
 
     int alignedBound = (n-m+1) - (n-m+1) % m;
 
     for(int i = 0; i < alignedBound; i += m){
-
         double M    = initMean(T,m,i);
         double s    = initSS(T,M,m,i);
         mu[i]       = M;
-        if(scaleFactor == 1){
-           sigma[i] = s;
+        sigma[i]    = sqrt(s/normConstant);   
+
+        for(int j = i+1; j < i+m; j++){
+            double Mprev = M;
+            M        = shiftMean(M,T[j+m-1],T[j-1],m);
+            s        = shiftSSS(s,M,Mprev,T[i+m-1],T[i-1]);
+            sigma[i] = sqrt(s/normConstant);
         }
-        else{
-           sigma[i] = s/scaleFactor;  // should be normalization factor, given that this is division
-        }
-        muSigInterp(T,mu,sigma,m,i);
-        /*for(int j = i; j < i+m; j++){
-            sigma[i] = 1/sqrt(sigma[i]);
-        }*/
+
     }
 
     /* compute unaligned portion */
     double M               = initMean(T,m,alignedBound);
     double s               = initSS(T,M,m,alignedBound);
     mu[alignedBound]       = M;
-    sigma[alignedBound] = s;
-
-    muSigInterp(T,mu,sigma,n-m-alignedBound+1,alignedBound);
-
-    /*for(int j = alignedBound; j < n-m+1; j++){
-        sigmaInv[j] = 1/sqrt(sigmaInv[j]);
-    }*/
+    sigma[alignedBound]    = s;
+    for(int i = alignedBound; i < n-m+1; i++){
+        sigma[i] = sqrt(s/normConstant);
+    }
 }
 
 static void sccomp(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int winLen, int blockSt, int blockFn, int lag){
