@@ -22,7 +22,7 @@ typedef struct mpObj matrixProfileObj;
 
 int iterCnt(int* x, int xOffs, int n, int m, double perc);
 
-void winmeansig(const double* T, double* mu, double* sigma, int n, int m);
+void winmeansig(const double* T, double* mu, double* sigma, int n, int m, int scaleFactor);
 
 void scBlockSolver(tsdesc* t, matrixProfileObj* matp);
 
@@ -33,6 +33,8 @@ matrixProfileObj* mp_init(int n, int m);
 void sc_destroy(tsdesc* T);
 
 void mp_destroy(matrixProfileObj* matp);
+
+//void corrToDist(double* mp, int n, int m);
 
 
 #endif
