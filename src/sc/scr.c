@@ -2,6 +2,7 @@
 #include<stdlib.h>
 #include<math.h>
 #include<unistd.h>
+#include<time.h>
 #include "scr.h"
 #define err 0x40
 #define chunkSz 0x1000  // We have to keep several arrays in L2
@@ -78,23 +79,23 @@ int iterCnt(int* x, int xOffs, int n, int m, double perc){
 }
 
 
-static double shiftMean(double mu, double a, double b, double m){
+static inline double shiftMean(double mu, double a, double b, double m){
     return mu + (a-b)/m;
 }
 
-static double incrementMean(double mu, double a, double m){
+static inline double incrementMean(double mu, double a, double m){
     return mu + (a - mu)/m;
 }
 
-static double shiftSSS(double s, double mu, double muprev, double x, double xprev){
+static inline double shiftSSS(double s, double mu, double muprev, double x, double xprev){
     return s + ((x - mu) * (x - muprev) - (xprev - mu) * (xprev - muprev));
 }
 
-static double shiftSXY(double x, double y, double xprev, double yprev, double mux, double muyprev){
+static inline double shiftSXY(double x, double y, double xprev, double yprev, double mux, double muyprev){
     return (x - mux)*(y - muyprev) - (xprev - mux)*(yprev - muyprev);
 }
 
-static double initSS(const double* T, double M, int m, int offset){
+static inline double initSS(const double* T, double M, int m, int offset){
     double s = 0;
     for(int i = offset; i < offset + m; i++){
         s += (T[i] - M) * (T[i] - M);
@@ -102,7 +103,7 @@ static double initSS(const double* T, double M, int m, int offset){
     return s;
 }
 
-static double centeredSS(const double* X, const double* Y, double Mx, double My, int winLen){
+static inline double centeredSS(const double* X, const double* Y, double Mx, double My, int winLen){
     double sxy = 0;
     for(int i = 0; i < winLen; i++){
         sxy += (X[i] - Mx)*(Y[i] - My);
@@ -161,12 +162,15 @@ static void corrToDist(double* mp, int n, int m){
     }
 }
 
-static void computeBlock(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int n, int m, int base, int offset){
+static inline void computeBlock(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int n, int m, int base, int offset){
     double Mx = mu[base];
     double My = mu[offset];
+    double corrxy = sigmaInv[base]*sigmaInv[offset];
     double covxy = centeredSS(&T[base],&T[offset],Mx,My,m);
-    double corrxy = covxy*sigmaInv[base]*sigmaInv[offset];
+    corrxy *= covxy;
+//    double corrxy = covxy*sigmaInv[base]*sigmaInv[offset];
     int upperBound = (chunkSz - m + 1) < (n - m - offset + 1) ? (chunkSz - m + 1) : (n - m - offset + 1);
+    
     if(mp[base] < corrxy){
         mp[base]  = corrxy;
         mpI[base] = offset;
@@ -175,12 +179,13 @@ static void computeBlock(const double* T, const double* mu, const double* sigmaI
         mp[offset]  = corrxy;
         mpI[offset] = base;
     }
-    for(int i = 1; i < n - offset - m + 1; i++){        
+    for(int i = 1; i < upperBound; i++){        
         double Myprev = My;
         Mx = mu[base+i];
         My = mu[offset+i];
+        double corrxy = sigmaInv[base]*sigmaInv[offset];
         covxy = shiftSXY(T[base+i+m-1],T[offset+i+m-1],T[base+i-1],T[offset+i-1],Mx,Myprev);
-        corrxy = covxy*sigmaInv[base+i]*sigmaInv[offset+i];
+        corrxy *= covxy;
         if(mp[base+i] < corrxy){
             mp[base+i]  = corrxy;
             mpI[base+i] = offset + i;
@@ -192,12 +197,12 @@ static void computeBlock(const double* T, const double* mu, const double* sigmaI
     }
 }
 
-
-static void blockupdateED(tsdesc* t, matrixProfileObj* matp, int blockSt, int blockLen){
+static inline void blockupdateED(tsdesc* t, matrixProfileObj* matp, int blockSt, int blockLen){
     int minlag = t->m;
     int count  = t->n - t->m + 1;
     double* T = t->T;
     double* sigmaInv = t->sigmaInv;
+    printf("blockSt: %lf\n",blockSt);
     for(int offs = blockSt + minlag; offs < count-t->m; offs++){ // t->m here is debug code
        computeBlock(T,t->mu,sigmaInv,matp->mp,matp->mpI,t->n,t->m,blockSt,chunkSz);
     }
@@ -212,11 +217,14 @@ void sjbs(tsdesc* t, matrixProfileObj* matp){
     int aligned = t->n - t->n%chunkSz;
  
     for(int base = 0; base < aligned; base += step){
+        clock_t t1 = clock();
         blockupdateED(t,matp,base,chunkSz);
+        clock_t t2 = clock();
+        printf("%lf\n",(double)(t2-t1)/CLOCKS_PER_SEC);
     }
-    if(aligned < count){
+    /*if(aligned < count){
         blockupdateED(t,matp,aligned,t->n-aligned+1);
-    }
+    }*/
     corrToDist(matp->mp,t->n,t->m);
 }
 
