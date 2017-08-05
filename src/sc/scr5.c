@@ -5,6 +5,7 @@
 #include<time.h>
 #include "scr.h"
 #define err 0x40
+#define kernWid 4
 //#define chunkSz 0x1F40  // We have to keep several arrays in L2
 
 
@@ -110,41 +111,53 @@ static void corrToDist(double* mp, int n, int m){
 }
 
 
-static inline void computeBlock(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int baseSt, int chunkLen, int subLen, int offset){
-    double Mx = mu[base];
-    double My = mu[offset];
-    double corrxy = sigmaInv[base]*sigmaInv[offset];
-    double covxy = centeredSS(&T[base],&T[offset],Mx,My,m);
-    corrxy *= covxy;
-    if(mp[base] < corrxy){
-        mp[base]  = corrxy;
+static inline void sstpupdate(double x, double y, double Mx, double My){
+    return (x - Mx)*(y - My);
+}
+
+static inline void updateMP(double* mp, int* mpI, double corr, int base, int offset){
+    if(mp[base] < corr){
+        mp[base] = corr;
         mpI[base] = offset;
     }
-    if(mp[offset] < corrxy){
-        mp[offset]  = corrxy;
-        mpI[offset] = base;
-    }
-    for(int i = 1; i < chunkLen; i++){
-        double Myprev = My;
-        Mx = mu[base+i];
-        My = mu[offset+i];
-        double corrxy = sigmaInv[base+i]*sigmaInv[offset+i];
-        covxy = shiftSXY(T[base+i+m-1],T[offset+i+m-1],T[base+i-1],T[offset+i-1],Mx,Myprev);
-        corrxy *= covxy;
-        if(mp[base+i] < corrxy){
-            mp[base+i]  = corrxy;
-            mpI[base+i] = offset + i;
-        }
-        if(mp[offset+i] < corrxy){
-            mp[offset+i]  = corrxy;
-            mpI[offset+i] = base + i;
-        }   
+    if(mp[offset] < corr){
+        mp[offset] = corr;
+        mpI[offset] = base; 
     }
 }
 
-
-
-
+static inline void computeBlock(const double* T, const double* mu, const double* sigmaInv, double* mp, int* mpI, int base, int chunkLen, int subLen, int offset){
+    //#define kernWid 0x04
+    double Mx;
+    double My[kernWid];
+    double corrxy[kernWid];
+    double covxy[kernWid];
+    for(int i = 0; i < kernWid; i++){
+        My[i] = mu[offset+i];
+        corrxy[i] = sigmaInv[base]*sigmaInv[offset+i];
+    }
+    for(int j = 0; j < subLen; j++){
+        for(int i = 0; i < kernWid; i++){
+            covxy[i] += (T[base+i]-Mx)*(T[offset+i]-My[i]);
+        }
+    }
+    // rename variables to be less misleading with the current design
+    for(int i = 0; i < kernWid; i++){
+        corrxy[i] *= covxy[i];
+    }
+    // it's worth noting that this part could be improved using horizontal comparison for the "base" operand
+    for(int i = 0; i < kernWid; i++){
+        updateMP(mp,mpI,corrxy[i],base,offset+i);
+    }
+    for(int i = 1; i < chunkLen; i++){
+        for(int j = 0; j < kernWid; j++){
+            
+        }
+        for(int j = 0; j < kernWid; j++){
+            updateMP(mp,mpI,corrxy[j],base+i,offset+i+j);
+        }
+    }
+}
 
 /* This part could use some cleanup. Unpacking structs is a bit messy here */
 static inline void blockupdateED(double* T, double* mp, double* mu, double* sigmaInv, int* mpI, int base, int offs, int chunkLen, int subLen){
@@ -159,30 +172,6 @@ static inline void blockupdateED(double* T, double* mp, double* mu, double* sigm
 }
 
 
-/*void sjbs(double* T, double* Mu, double* sigmaInv, int n, int m){
-    int chunkLen = 2048; // sentinel for now
-    int count = n - 2*m + 1;
-    int step  = 3*m + 1;
-    int stagg = 4;       // unroll factor, used to hide latency, if each is computed independently, then it's 1
-    int aligned = n - n%(4*>m);
-    for(base = 0; base < n - ; base += step){
-        for(int offset = base + m; offset < n - chunkLen + 1; offset += stagg){
-            
-        }
-    } */
-    /*for(int base = 0; base < aligned; base += step){
-       blockupdateED(t,matp,base);
-    }*/
-    /*if(aligned < count){
-        blockupdateED(t,matp,aligned,t->n-aligned+1);
-    }*/
-/*    corrToDist(mp,n,m);
-}*/
-
 /* This is the anytime version */
 void mpIndexBlkSolver(tsdesc* t, matrixProfileObj* matp, int* permI, int strt, int perc){
-// get the number of indices required.
-// sort indices
-// call block solve for each index
-// finish writing this at some point 
 }
