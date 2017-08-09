@@ -14,7 +14,6 @@
 
 
 
-
 int iterCnt(int* x, int xOffs, int n, int m, double perc){
     int w = n - m + 1;
     long numReq = (int)ceil(((double)(w*(w+1)/2))*perc);
@@ -28,7 +27,6 @@ int iterCnt(int* x, int xOffs, int n, int m, double perc){
     }
     return k;
 }
-
 
 static inline double shiftMean(double mu, double a, double b, double m){
     return mu + (a-b)/m;
@@ -53,15 +51,6 @@ static inline double initSS(const double* T, double M, int m, int offset){
     }
     return s;
 }
-
-static inline double centeredSS(const double* X, const double* Y, double Mx, double My, int winLen){
-    double sxy = 0;
-    for(int i = 0; i < winLen; i++){
-        sxy += (X[i] - Mx)*(Y[i] - My);
-    }
-    return sxy;
-}
-
 
 static double initMean(const double* T, int m, int offset){
     double M = T[offset];
@@ -103,15 +92,13 @@ void winmeansig(const double* T, double* mu, double* sigma, int n, int m,int nor
     }
 }
 
-
 static void corrToDist(double* mp, int n, int m){
     for(int i = 0; i < n-m+1; i++){
         mp[i] = sqrt(2*m*(1-mp[i]));
     }
 }
 
-
-static inline void sstpupdate(double x, double y, double Mx, double My){
+static inline double sstpupdate(double x, double y, double Mx, double My){
     return (x - Mx)*(y - My);
 }
 
@@ -151,7 +138,7 @@ static inline void computeBlock(const double* T, const double* mu, const double*
     }
     for(int i = 1; i < chunkLen; i++){
         for(int j = 0; j < kernWid; j++){
-            
+            shiftSXY(T[base+i+subLen],T[offset+i+j+subLen],T[base+i-1],T[offset+i+j-1],mu[base+i],mu[offset+i+j-1]);
         }
         for(int j = 0; j < kernWid; j++){
             updateMP(mp,mpI,corrxy[j],base+i,offset+i+j);
@@ -160,17 +147,16 @@ static inline void computeBlock(const double* T, const double* mu, const double*
 }
 
 /* This part could use some cleanup. Unpacking structs is a bit messy here */
-static inline void blockupdateED(double* T, double* mp, double* mu, double* sigmaInv, int* mpI, int base, int offs, int chunkLen, int subLen){
-    int step = chunkLen - m + 1; 
-    int stagger = 4; // sentinel
-    while(base + chunkLen - 1 < n){
-        for(int offset = base + m; offset < n-m+1; offset += stagger){
+static inline void blockupdateED(double* T, double* mp, double* mu, double* sigmaInv, int* mpI, int base, int offs, int seqLen, int chunkLen, int subLen){
+    int step = chunkLen - subLen + 1; 
+    //int stagger = 4; // sentinel
+    while(base + chunkLen - 1 < seqLen){
+        for(int offset = base + subLen; offset < seqLen-subLen+1; offset += kernWid){
             computeBlock(T,mu,sigmaInv,mp,mpI,base,chunkLen,subLen,offset);
         }
         base += step;
     }
 }
-
 
 /* This is the anytime version */
 void mpIndexBlkSolver(tsdesc* t, matrixProfileObj* matp, int* permI, int strt, int perc){
