@@ -16,7 +16,7 @@ static inline __m256d loada(double* a, int offset){
 }
 
 static inline __m256i loada(int* a, int offset){
-   return  _mm256_load_si256(a+offset);
+   return  _mm256_load_si256((__m256i*)(a+offset));
 }
 
 static inline __m256d loadu(double* a, int offset){
@@ -24,11 +24,11 @@ static inline __m256d loadu(double* a, int offset){
 }
 
 static inline __m256i loadu(int* a, int offset){
-   return _mm256_loadu_si256(a+offset);
+   return _mm256_loadu_si256((__m256i*)(a+offset));
 }
 
 static inline void storea(__m256d oper, double* a, int offset){
-   return _mm256_store_pd(a,oper);
+   return _mm256_store_pd(a+offset,oper);
 }
 
 static inline void storea(__m256i oper, int* a, int offset){
@@ -36,10 +36,10 @@ static inline void storea(__m256i oper, int* a, int offset){
 }
 
 static inline void storeu(__m256d oper, double* a,int offset){
-   return _mm256_storeu_pd(a+offset,oper);
+   _mm256_storeu_pd(a+offset,oper);
 }
 
-static inline void (__m256i oper, int* a,int offset){
+static inline void storeu(__m256i oper, int* a,int offset){
    _mm256_storeu_si256((__m256i*)(a+offset),oper);
 }
 
@@ -81,6 +81,10 @@ static inline __m256d mult(__m256d a, __m256d b){
    return _mm256_mul_pd(a,b);
 }
 
+static inline __m256d add(__m256d a, __m256d b){
+   return _mm256_add_pd(a,b);
+}
+
 static inline __m256i add(__m256i a, __m256i b){
    return _mm256_add_epi64(a,b);
 }
@@ -112,7 +116,7 @@ static inline __m256d select12(__m256d a, __m256d b){
    return _mm256_blend_pd(a,b,0x03);
 }
 
-static inline __m256i select1(__m256i a, __m256i b){
+static inline __m256i select12(__m256i a, __m256i b){
    return _mm256_blend_epi32(a,b,0x03);
 }
 
@@ -120,14 +124,8 @@ static inline __m256d select123(__m256d a, __m256d b){
    return _mm256_blend_pd(a,b,0x07);
 }
 
-static inline __m256i select1(__m256i a, __m256i b){
+static inline __m256i select123(__m256i a, __m256i b){
    return _mm256_blend_epi32(a,b,0x07);
-}
-
-
-// In the case of indexing, we often set integer values using the result of a floating point comparison. 
-static inline __m256i blend(__m256i compar, __m256i base, __m256d mask){
-   return _mm256_blendv_epi8(compar,base,_mm256_castpd_si256(mask));
 }
 
 
