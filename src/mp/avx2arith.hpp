@@ -15,7 +15,7 @@ static inline __m256d loada(double* a, int offset){
    return _mm256_load_pd(a+offset);
 }
 
-static inline __m256i loada(int* a, int offset){
+static inline __m256i loada(long* a, int offset){
    return  _mm256_load_si256((__m256i*)(a+offset));
 }
 
@@ -96,36 +96,36 @@ static inline __m256d cmpgtr(__m256d compar, __m256d base){
 
 // swizzles
 static inline __m256d blend(__m256d compar, __m256d base, __m256d mask){
-   return _mm256_blendv_pd(compar,base,mask);
+   return _mm256_blendv_pd(base,compar,mask);
 }
 
 // In the case of indexing, we often set integer values using the result of a floating point comparison. 
 static inline __m256i blend(__m256i compar, __m256i base, __m256d mask){
-   return _mm256_blendv_epi8(compar,base,_mm256_castpd_si256(mask));
+   return _mm256_blendv_epi8(base,compar,_mm256_castpd_si256(mask));
 }
 
 static inline __m256d select1(__m256d a, __m256d b){
-   return _mm256_blend_pd(a,b,0x01);
+   return _mm256_blend_pd(a,b,0x0E);
 }
 
 static inline __m256i select1(__m256i a, __m256i b){
-   return _mm256_blend_epi32(a,b,0x01);
+   return _mm256_blend_epi32(a,b,0x0E);
 }
 
 static inline __m256d select12(__m256d a, __m256d b){
-   return _mm256_blend_pd(a,b,0x03);
+   return _mm256_blend_pd(a,b,0x0C);
 }
 
 static inline __m256i select12(__m256i a, __m256i b){
-   return _mm256_blend_epi32(a,b,0x03);
+   return _mm256_blend_epi32(a,b,0x0C);
 }
 
 static inline __m256d select123(__m256d a, __m256d b){
-   return _mm256_blend_pd(a,b,0x07);
+   return _mm256_blend_pd(a,b,0x08);
 }
 
 static inline __m256i select123(__m256i a, __m256i b){
-   return _mm256_blend_epi32(a,b,0x07);
+   return _mm256_blend_epi32(a,b,0x08);
 }
 
 

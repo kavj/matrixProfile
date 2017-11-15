@@ -1,5 +1,5 @@
 #include "avx2arith.hpp"
-#include<stdio.h>
+#include<cstdio>
 #include<stdlib.h>
 
 // It would be nice to cast everything to __m256d and use arithmetic operators where possible. 
@@ -15,7 +15,7 @@ static void printDArray(double *a){
    printf("%lf %lf %lf %lf\n",a[0],a[1],a[2],a[3]);
 }
 
-static void printIntArray(int *a){
+static void printIntArray(long *a){
    printf("%d %d %d %d\n",a[0],a[1],a[2],a[3]);
 }
 
@@ -30,6 +30,18 @@ static void printm256D(__m256d a){
    _mm256_store_pd(b,a);
    printf("%lf %lf %lf %lf\n",b[0],b[1],b[2],b[3]);
 }
+
+static void printboolarray(double * a, double* b, double* mask){
+   for(int i = 0; i < 4; i++){
+      if(mask[i])
+         printf("%lf ",a[i]);
+      else
+         printf("%lf ",b[i]);
+   }
+   printf("\n");
+}
+
+
 
 static void makeshiftmultadd(double* a, double* b, double* c){
     for(int i = 0; i < 4; i++){
@@ -57,7 +69,7 @@ static void makeshiftadd(double* a, double* b, double* c){
 
 static void makeshiftcompare(double* a, double* b, double* c){
    for(int i = 0; i < 4; i++){
-      c[i] = b[i] > a[i];
+      c[i] = a[i] > b[i];
    }
 }
 
@@ -150,29 +162,56 @@ int main(void){
    printf("\n\ntesting comparison instructions\n");
    expect();
    makeshiftcompare(a,b,buf);
+   printf("this one is slightly different,in the simd version, an integer output of -1 indicates that all bits are set over that operand\n"); 
    printDArray(buf);
    actual();
    k = cmpgtr(c,d);
-   printm256D(k);
+   __m256i p = _mm256_castpd_si256(k);
+   printm256I(p); // this is a mask rather than a value. Using a floating point interpretation, it won't produce a reasonable readable output.
 
    printf("\n\ntesting blends\n");
+
+   printf("testing the results of the prior comparison\n");
+   expect();
+   printboolarray(a,b,buf);
+   actual();
+   __m256d q = blend(c,d,k);
+   printm256D(q);
+   printf("testing the use of double precision floating point comparators on 64 bit integer (long) vectors\n"); 
+   expect();
+   long ibuff[4];
+   for(int i = 0; i < 4; i++){
+       if(buf[i]){
+          ibuff[i] = h[i];
+       }
+       else{
+          ibuff[i] = z[i];
+       }
+   }
+   printIntArray(ibuff);
+   actual(); 
+   p = loada(h,0);
+   j = loada(z,0);
+   __m256i r = blend(p,j,k);
+   printm256I(r); 
+
    printf("\n\narray A: ");
    printDArray(a);
    printf("\n\narray B: ");
    printDArray(b);
    printf("\n\nselect a 0 only\n");
-   k = select1(c,d);
    expect();
    double blbuf1[4] = {a[0],b[1],b[2],b[3]};
    printDArray(blbuf1);
    actual();
+   k = select1(c,d);
    printm256D(k);
    printf("\n\nselect a 0 and 1\n");
    expect();
    double blbuf2[4] = {a[0],a[1],b[2],b[3]};
    printDArray(blbuf2);
-   k = select12(c,d);
    actual();
+   k = select12(c,d);
    printm256D(k);
    printf("\n\nselect a 0 through 2\n");
    expect();
