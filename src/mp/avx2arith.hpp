@@ -1,7 +1,4 @@
 #include <immintrin.h>
-#define msk1 0x01
-#define msk12 0x03
-#define msk123 0x07
 #ifdef __FMA__            // should work on clang and gcc, update for visual C++ later
 #define FMA_SUPPORTED 1
 #endif
@@ -9,7 +6,7 @@
 //a simd class might be prettier, but it leaves too much room for subtle bugs
 //This is as close to a minimal interface as I can get. 
 
-
+namespace vmth{
 // loads and stores
 static inline __m256d loada(double* a, int offset){
    return _mm256_load_pd(a+offset);
@@ -24,7 +21,7 @@ static inline __m256d loadu(double* a, int offset){
 }
 
 static inline __m256i loadu(int* a, int offset){
-   return _mm256_loadu_si256((__m256i*)(a+offset));
+   return _mm256_loadu_si256((__m256i const*)(a+offset));
 }
 
 static inline void storea(__m256d oper, double* a, int offset){
@@ -128,4 +125,13 @@ static inline __m256i select123(__m256i a, __m256i b){
    return _mm256_blend_epi32(a,b,0x08);
 }
 
+static inline __m256i shiftmerge1(__m256i a, __m256i b){
+   return _mm256_alignr_epi8(_mm256_permute2x128_si256(a,b,33),a,4);
+}
 
+static inline __m256d shiftmerge1(__m256d a, __m256d b){
+   return _mm256_alignr_epi8(_mm256_permute2f128_pd(a,b,33),a,4);
+}
+
+
+}
