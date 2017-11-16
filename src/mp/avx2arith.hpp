@@ -126,11 +126,11 @@ static inline __m256i select123(__m256i a, __m256i b){
 }
 
 static inline __m256i shiftmerge1(__m256i a, __m256i b){
-   return _mm256_alignr_epi8(_mm256_permute2x128_si256(a,b,33),a,4);
+   return _mm256_alignr_epi8(_mm256_permute2x128_si256(a,b,33),a,16);
 }
 
 static inline __m256d shiftmerge1(__m256d a, __m256d b){
-   return _mm256_castsi256_pd(_mm256_alignr_epi8(_mm256_permute2f128_pd(a,b,33),a,4));
+   return _mm256_castsi256_pd(_mm256_alignr_epi8(_mm256_castpd_si256(_mm256_permute2f128_pd(a,b,33)),_mm256_castpd_si256(a),8));
 }
 
 
