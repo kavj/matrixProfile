@@ -84,6 +84,7 @@ static void actual(void){
 
 
 
+using namespace vmth;
 
 int main(void){
    double a[4] = {1.0,5.2,3.0,7.0};
@@ -220,6 +221,22 @@ int main(void){
    actual();
    k = select123(c,d);
    printm256D(k);
+   double f1[4] = {1.0,2.0,3.0,4.0};
+   double f2[4] = {5.0,6.0,7.0,8.0};
+   c = loada(f1,0);
+   d = loada(f2,0);
+   printf("testing register shift merge\n");
+   printf("original 1\n");
+   printm256D(c);
+   printf("original 2\n");
+   printm256D(d);
+   expect();
+   printf("%d %d %d %d\n",c[1],c[2],c[3],d[0]);
+   actual();
+   d = shiftmerge1(c,d);
+   printm256D(d);
+   h = shiftmerge1(h,z);
+   printm256I(h);
    //printf("array H: ");
    //printArrayI(h);
    //printf("array Z: ");
