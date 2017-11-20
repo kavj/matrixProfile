@@ -157,7 +157,10 @@ int main(int argc, char* argv[]){
     clock_t t2 = clock();
     printf("%lf %lf %lf %lf\n",T[n-1],dX[n-m-1],dF[n-m-1],sigmaInv[n-m-1]);
     clock_t t3 = clock();//omp_get_wtime();
-    accumTest4(T, dX, dF, sigmaInv, buffer, bufferI,n-m);
+    #pragma omp parallel for 
+    for(int i = 0; i < 8; i++){
+        accumTest4(T, dX, dF, sigmaInv, buffer, bufferI,n-m);
+    }
     clock_t t4 = clock();//omp_get_wtime();
     printf("done\n");
     printf("test:  %lf\n",(double)(t2-t1)/CLOCKS_PER_SEC);
