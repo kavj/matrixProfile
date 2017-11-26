@@ -15,8 +15,18 @@ extern void sc_destroy(tsdesc* T);
 extern matrixProfileObj* mp_init(int n, int m);
 extern void mp_destroy(matrixProfileObj* mp); 
 */
+
+extern void  accumTest4_4(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
+
+extern void  accumTest4_2(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
 extern void  accumTest4(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
-   
+extern void  recursiveTest(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n, int m);
+extern void callKern(double* Cxy, double* dX, double* dF, double* s, double* output, long* outputI, int n);
+extern void  accumTest6(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
+extern void  accumTest7(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
+  
+
+extern void accumTest5(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
 
 static inline double shiftMean(double mu, double a, double b, double m){
     return mu + (a-b)/m;
@@ -157,10 +167,15 @@ int main(int argc, char* argv[]){
     clock_t t2 = clock();
     printf("%lf %lf %lf %lf\n",T[n-1],dX[n-m-1],dF[n-m-1],sigmaInv[n-m-1]);
     clock_t t3 = clock();//omp_get_wtime();
-    #pragma omp parallel for 
-    for(int i = 0; i < 8; i++){
-        accumTest4(T, dX, dF, sigmaInv, buffer, bufferI,n-m);
-    }
+ //   #pragma omp parallel for 
+//    for(int i = 0; i < 8; i++){
+      // callKern(T,dX,dF,sigmaInv,buffer,bufferI, n-4*m);
+       accumTest4_4(T, dX, dF, sigmaInv, buffer, bufferI,n);
+
+       //recursiveTest(T, dX, dF, sigmaInv, buffer, bufferI,n,m);
+  
+     //  accumTest7(T, dX, dF, sigmaInv, buffer, bufferI,n-m);
+//    }
     clock_t t4 = clock();//omp_get_wtime();
     printf("done\n");
     printf("test:  %lf\n",(double)(t2-t1)/CLOCKS_PER_SEC);

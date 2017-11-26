@@ -1,8 +1,8 @@
 #include<cstdio>
 #include "../mp/avx2arith.hpp"
 #define simdWid 4
-#define innerWid 16 
-#define tileSz 128 
+#define innerWid 8 
+#define tileSz 512 
 #define alignedInner (innerWid/4-1)
 
 using namespace vmth;
@@ -105,7 +105,7 @@ void callKern(double* Cxy, double* dX, double* dF, double* s, double* output, lo
    }
    printf("%lu\n",t3);
 }
-
+/*
 void accumTest8(double* t, double* dX, double* dF, double* s, double* output, int n, int m){
    double a[250*innerWid*4];
    
@@ -118,7 +118,7 @@ void accumTest8(double* t, double* dX, double* dF, double* s, double* output, in
 
 }
 
-
+*/
 void  accumTest7(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n){
     double a[tileSz*innerWid*4];
     double b[tileSz*innerWid*4];
@@ -198,10 +198,10 @@ void  accumTest6(double* Cxy, double* dX, double* dF, double*s, double* output, 
                 for(int l = 0; l < innerWid; l+=4){
                     c1 = mult_add(F2,X2,mult_add(F1,X1,c1)); 
                     storea(c1,a,l);
-                    F1 = shiftOnly1(F1,F3);
-                    X1 = shiftOnly1(X1,X3);
-                    F2 = shiftOnly1(F1,F3);
-                    X2 = shiftOnly1(X2,X3);
+                    F1 = shift1(F1,F3);
+                    X1 = shift1(X1,X3);
+                    F2 = shift1(F1,F3);
+                    X2 = shift1(X2,X3);
                     t3 += 4;
                    /* vtf c2 = loada(output,i+k+l);
                     vtf c3 = loada(output,j+k+l);
@@ -320,8 +320,120 @@ static inline void kernTest(double* Cxy, double* dX, double* dF, double* s, doub
 }*/
 
 
-// bad
+static inline void accumTestNew(double* Cxy, double* dX, double* dF, double*s, double* buffer, int iSt, int jSt){
+   double a[innerWid*simdWid];
+   for(int i = iSt; i < iSt+innerWid; i += 4*simdWid){
+      vtf c1 = loada(Cxy,i);
+      vtf c2 = loada(Cxy,i+simdWid);
+      vtf c3 = loada(Cxy,i+2*simdWid);
+      vtf c4 = loada(Cxy,i+3*simdWid);
+      for(int j = jSt; j < jSt+innerWid; j += simdWid){
+         //a1 = bcast(dX
+     
+      }
+   }
+}
+
+
 void  accumTest4(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n){
+   double a[tileSz*simdWid];
+   double b[tileSz*simdWid];
+   unsigned long t3 = 0;
+
+   for(int j = 0; j < n; j+= tileSz){
+      for(int i = 0; i < j; i += tileSz){
+         for(int l = 0; l < innerWid/simdWid; l++){
+            vtf c1 = loada(Cxy,i);
+            for(int k = 0; k < tileSz; k += innerWid){
+                   c1 = mult_add(bcast(dX,i+k+l),loadu(dF,j+k+l),c1);
+                   storea(c1,a,k);
+                   storea(mult(c1,mult(bcast(s,i+k+l),loadu(s,j+k+l))),a,l*simdWid);
+                   t3 += 4;
+                   storea(mult(loada(a,k),mult(loadu(s,j+k+l),bcast(s,i+k+l))),b,l*simdWid);
+            }
+        
+            storea(c1,Cxy,i);
+            vtf b1 = bcast(output,j);
+            for(int l = 0; l < innerWid; l += simdWid){
+               vtf a1 = loada(output,i+l);
+               for(int t = 0; t < simdWid; t++){
+                  a1 = max(a1,loada(b,l+t*simdWid));
+               }
+               storea(a1,output,i+l);
+               vtf b1 = loada(output,j+l);
+               for(int t = 0; t < innerWid; t+= simdWid){
+                  b1 = max(b1,loadu(b,t));
+               }
+               storea(b1,output,j+l);
+            }
+         }
+      }
+   }
+   printf("%lu %d \n",t3,n);
+}
+
+/*
+void  accumTest4(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n){
+   double a[innerWid];
+   double b[innerWid];
+   unsigned long t3 = 0;
+   
+   for(int j = 0; j < n; j+= tileSz){
+      for(int i = 0; i < j; i += tileSz){
+         for(int k = 0; k < tileSz; k += innerWid){
+            vtf c1 = loada(Cxy,i);
+            for(int l = 0; l < innerWid; l += simdWid){
+               vtf dfi =   loada(dF,i+k+l);
+               vtf dfi_2 = loada(dF,i+k+l+simdWid);
+               vtf dfi_3 = preshuffle(dfi,dfi_2);
+               vtf dfj =   bcast(dF,j+k+l);
+               vtf dXi =   loada(dX,i+k+l);
+               vtf dXi2=   loada(dX,i+k+l+simdWid);
+               vtf dXi3=   preshuffle(dXi,dXi2);
+               vtf dXj =   bcast(dX,j+k+l);
+               vtf sj  =   bcast(s,j+k+l);
+               vtf si  =   loada(s,i+k+l);
+               vtf si2 =   loada(s,i+k+l+simdWid);
+               vtf si3 =   preshuffle(si,si2);
+                   c1  =   mult_add(dfi,dXj,c1);
+                   c1  =   mult_add(dfj,dXi,c1);
+                           storea(mult(c1,mult(si,sj)),a,l);
+                   dXi =   shift1(dXi3,dXi);
+                   dXj =   bcast(dX,j+k+l+simdWid);
+                   dfi =   shift1(dfi,dfi_3);
+                   dfj =   bcast(dF,j+k+l+simdWid);
+                   si  =   shift1(si,si3);
+                   sj  =   bcast(s,j+k+l+simdWid);
+                   c1  =   mult_add(dfi,dXj,c1);
+                   c1  =   mult_add(dfj,dXi,c1);
+                   storea(mult(c1,mult(si,sj)),a,l+simdWid);
+                   dXi =   shift2(dXi3,dXi);
+                   dXj =   bcast(dX,j+k+l+2*simdWid);
+                   dfi =   shift2(dfi,dfi_3);
+                   si  =   shift2(si,si3);
+                   sj  =   bcast(s,j+k+l+2*simdWid);
+                   c1  =   mult_add(dfi,dXj,c1);
+                   c1  =   mult_add(dfi,dXj,c1);
+                   storea(mult(c1,mult(si,sj)),a,l+2*simdWid); 
+            }
+            vtf a1 = loada(output,i+k);
+            vtf b1 = bcast(output,j+k);
+            for(int l = 0; l < innerWid; l += simdWid){
+               vtf d1 = loada(a,l);
+               a1 = max(a1,d1);
+               b1 = max(b1,d1);
+               
+            }
+            storea(a1,output,i+k);
+            storea(b1,output,j+k);
+         }
+      }
+   }
+}
+*/
+
+// bad
+void  accumTest4_orig(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n){
     double a[tileSz];
     double b[tileSz];
     unsigned long t3 = 0;
