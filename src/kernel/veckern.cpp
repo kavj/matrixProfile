@@ -2,7 +2,7 @@
 #include "../mp/avx2arith.hpp"
 #define simdWid 4
 #define innerWid 16 
-#define tileSz 256
+#define tileSz 128 
 #define alignedInner (innerWid/4-1)
 
 using namespace vmth;
@@ -106,14 +106,86 @@ void callKern(double* Cxy, double* dX, double* dF, double* s, double* output, lo
    printf("%lu\n",t3);
 }
 
+void accumTest8(double* t, double* dX, double* dF, double* s, double* output, int n, int m){
+   double a[250*innerWid*4];
+   
+   for(int i = 0; i < m; i+= 4){
+      
+      for(int j = 0; j < m
+       
+      }
+   }
+
+}
+
+
+void  accumTest7(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n){
+    double a[tileSz*innerWid*4];
+    double b[tileSz*innerWid*4];
+    int t3 = 0;
+  //  printf("check1\n");
+    for(int i = 0; i < n/2; i += tileSz){
+        for(int j = i; j < n; j+=tileSz){
+            for(int k = 0; k < tileSz; k+=4){
+                
+                vtf c1 = loada(Cxy,j+k*innerWid);
+            //    vtf F1 = loada(dF,i+k*innerWid);
+            //    vtf X1 = loada(dX,i+k*innerWid);
+            //    vtf F2 = bcast(dF,j+k*innerWid);
+            //    vtf X2 = bcast(dX,j+k*innerWid);
+             //   vtf F3 = preshuffle(F2,loada(dF,i+k*innerWid+4));
+             //   vtf X3 = preshuffle(X2,loada(dX,j+k*innerWid+4));
+// printf("check1\n");
+
+                for(int l = 0; l < innerWid/4; l++){
+                    storeu(c1,a,l);
+                    vtf F1 = loadu(dF,i+k*innerWid+l);
+                    vtf X1 = loadu(dX,i+k*innerWid+l);
+                    vtf F2 = loadu(dF,j+k*innerWid+l);
+                    vtf X2 = loadu(dX,j+k*innerWid+l);
+		    c1 = mult_add(F2,X2,mult_add(F1,X1,c1)); 
+                     
+                 /*  F1 = shiftOnly1(F1,F3);
+                    X1 = shiftOnly1(X1,X3);
+                    F2 = shiftOnly1(F1,F3);
+                    X2 = shiftOnly1(X2,X3);
+                  */  t3 += 4;
+                   /* vtf c2 = loada(output,i+k+l);
+                    vtf c3 = loada(output,j+k+l);
+                    vti c4 = loada(outputI,i+k+l);
+                    vti c5 = loada(outputI,j+k+l);
+                    */
+                    vtf c6 = loadu(a,l);
+                    select12(c6,loadu(output,j+k+l));
+                    storeu(c6,output,i+k+l*4);
+                    storeu(c6,output,j+k+l*4);
+                    vti c7 = set(i+k+l,i+k+l+1,i+k+l+2,i+k+l+3);
+                    vti c8 = bcast(j+k+l);
+// printf("check%d\n",l+k+i);
+
+                }
+               // printf("%d\n",k);
+                storea(loada(a,innerWid),output,k);
+            }
+        }
+
+    }
+    printf("%lu %d \n",t3,n);
+}
+
+
+
+
 
 void  accumTest6(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n){
     double a[tileSz*innerWid*4];
     double b[tileSz*innerWid*4];
     int t3 = 0;
+  //  printf("check1\n");
     for(int i = 0; i < n/2; i += tileSz){
         for(int j = i; j < n; j+=tileSz){
             for(int k = 0; k < tileSz; k+=4){
+                
                 vtf c1 = loada(Cxy,j+k*innerWid);
                 vtf F1 = loada(dF,i+k*innerWid);
                 vtf X1 = loada(dX,i+k*innerWid);
@@ -121,29 +193,32 @@ void  accumTest6(double* Cxy, double* dX, double* dF, double*s, double* output, 
                 vtf X2 = bcast(dX,j+k*innerWid);
                 vtf F3 = preshuffle(F2,loada(dF,i+k*innerWid+4));
                 vtf X3 = preshuffle(X2,loada(dX,j+k*innerWid+4));
+// printf("check1\n");
+
                 for(int l = 0; l < innerWid; l+=4){
                     c1 = mult_add(F2,X2,mult_add(F1,X1,c1)); 
-                    storea(c1,a,l+k*innerWid);
+                    storea(c1,a,l);
                     F1 = shiftOnly1(F1,F3);
                     X1 = shiftOnly1(X1,X3);
                     F2 = shiftOnly1(F1,F3);
                     X2 = shiftOnly1(X2,X3);
                     t3 += 4;
-                }
-                storea(c1,Cxy,j+k);
-            }
-            for(int k = 0; k < tileSz; k+=4){
-               for(int l = 0; l < innerWid; l+=4){
-                    vtf c2 = loada(output,i+k+l);
+                   /* vtf c2 = loada(output,i+k+l);
                     vtf c3 = loada(output,j+k+l);
                     vti c4 = loada(outputI,i+k+l);
                     vti c5 = loada(outputI,j+k+l);
-                    vtf c6 = loada(a,k+l);
+                    */
+                    vtf c6 = loada(a,l);
+                    select12(c6,loada(output,j+k+l));
+                    storea(c6,output,i+k);
+                    storea(c6,output,j+k);
                     vti c7 = set(i+k+l,i+k+l+1,i+k+l+2,i+k+l+3);
                     vti c8 = bcast(j+k+l);
+// printf("check%d\n",l+k+i);
 
                 }
-                storea(loada(a,k),output,k);
+               // printf("%d\n",k);
+                storea(loada(a,innerWid),output,k);
             }
         }
 
@@ -321,7 +396,7 @@ void  accumTest4(double* Cxy, double* dX, double* dF, double*s, double* output, 
                     c1 = mult_sub(bcast(dX,j+k+l),loadu(dF,i+k+l),c1);
                     c1 = mult_add(bcast(dF,j+k+l),loadu(dX,i+k+l),c1);
                     storea(c1,a,l);
-                }
+      ((__m256i*)(a+offset),oper          }
                 storea(c1,Cxy,j+k);
                 vtf s2 = bcast(s,j+k);
                 for(int l = 0; l < innerWid; l+=4){
