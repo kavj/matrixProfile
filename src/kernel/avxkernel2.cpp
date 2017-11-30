@@ -7,181 +7,8 @@ using namespace vmth;
 typedef  __m256d vtf;
 typedef  __m256i vti;
 
-/*
 
-void  accumTest4_7_13(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n){
-   unsigned long t3 = 0;
-   double* a = (double*)outputI;
 
-//   double a[innerWid*40];
-for(int i = 0; i < 4; i++){
-for(int superoff = 0; superoff < n; superoff+=innerWid){
-  for(int superdiag = 0; superdiag < superoff; superdiag += innerWid){
-   for(int diag = superdiag; diag < superdiag+innerWid; diag += 40){
-      vtf c1 = loada(Cxy,diag);
-      vtf c2 = loada(Cxy,diag+4);
-      vtf c3 = loada(Cxy,diag+8);
-      vtf c4 = loada(Cxy,diag+12);
-      vtf c5 = loada(Cxy,diag+16);
-      vtf c6 = loada(Cxy,diag+20);
-      vtf c7 = loada(Cxy,diag+24);
-      vtf c8 = loada(Cxy,diag+28);
-      vtf c9 = loada(Cxy,diag+32);
-      vtf c10= loada(Cxy,diag+36);
-      for(int offset = superoff; offset < superoff+innerWid; offset+=4){
-         t3 += 40;
-         vtf dXY = bcast(dX,offset);
-         vtf dFY = bcast(dF,offset);
-         vtf sY = bcast(s,offset);
- 
-         c1 = mult_add(dXY,loada(dF,offset+diag),c1);
-         c2 = mult_add(dXY,loada(dF,offset+diag)+4,c2);
-         c3 = mult_add(dXY,loada(dF,offset+diag+4),c3);
-         c4 = mult_add(dXY,loada(dF,offset+diag+8),c4);
-         c5 = mult_add(dXY,loada(dF,offset+diag+12),c5);
-         c6 = mult_add(dXY,loada(dF,offset+diag+16),c6);
-         c7 = mult_add(dXY,loada(dF,offset+diag+20),c7);
-         c8 = mult_add(dXY,loada(dF,offset+diag+24),c8);
-         c9 = mult_add(dXY,loada(dF,offset+diag+28),c9);
-         c10= mult_add(dXY,loada(dF,offset+diag+32),c10);
-         
-         vtf s1 = mult(c1,loada(s,offset+diag));
-         vtf s2 = mult(c2,loada(s,offset+diag+4));
-         vtf s3 = mult(c3,loada(s,offset+diag+8));
-         vtf s4 = mult(c4,loada(s,offset+diag+12));
-         vtf s5 = mult(c5,loada(s,offset+diag+16));
-         vtf s6 = mult(c6,loada(s,offset+diag+20));
-         vtf s7 = mult(c7,loada(s,offset+diag+24));
-         vtf s8 = mult(c8,loada(s,offset+diag+28));
-         vtf s9 = mult(c9,loada(s,offset+diag+32));
-         vtf s10= mult(c10,loada(s,offset+diag+36));
-
-         vtf mp1 = max(s1,bcast(output,offset));
-         mp1 = max(mp1,s2);
-         vtf mp2 = max(s3,s4);
-         vtf mp3 = max(s4,s5);
-         vtf mp4 = max(s6,s7);
-         vtf mp5 = max(s8,s9);
-         mp1 = max(mp1,s10);
-         mp2 = max(mp2,mp3);
-         mp4 = max(mp4,mp5);
-         mp1 = max(mp1,mp2);
-         mp1 = max(mp1,mp4); 
-
-         storea(max(s1,loada(a,40*(offset-superoff))),a,40*(offset-superoff));
-         storea(max(s2,loada(a,40*(offset-superoff+1))),a,40*(offset-superoff+1));
-         storea(max(s3,loada(a,40*(offset-superoff+2))),a,40*(offset-superoff+2));
-         storea(max(s4,loada(a,40*(offset=superoff+3))),a,40*(offset-superoff+3));
-      /*   storea(max(s5,loada(a,40*(offset-superoff+4))),a,40*(offset-superoff+4));
-         storea(max(s6,loada(a,40*(offset-superoff+5))),a,40*(offset-superoff+5));
-         storea(max(s7,loada(a,40*(offset-superoff+6))),a,40*(offset-superoff+6));
-         storea(max(s8,loada(a,40*(offset=superoff+7))),a,40*(offset-superoff+7));
-         storea(max(s9,loada(a,40*(offset-superoff+8))),a,40*(offset-superoff+8));
-         storea(max(s10,loada(a,40*(offset-superoff+9))),a,40*(offset-superoff+9));
-
-         storea(mp1,output,diag+offset);
-      }
-      storea(c1,Cxy,diag);
-      storea(c2,Cxy,diag+4);
-      storea(c3,Cxy,diag+8);
-      storea(c4,Cxy,diag+12);
-      storea(c5,Cxy,diag+16);
-      storea(c6,Cxy,diag+20);
-      storea(c7,Cxy,diag+24);
-      storea(c8,Cxy,diag+28);
-      storea(c9,Cxy,diag+32);
-      storea(c10,Cxy,diag+36);
-      
-      }
- }
-}
-*/
-
-void accumTest4_7_8(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n){
-   unsigned long t3 = 0;
-   double* a = (double*)outputI;
-//   double a[innerWid*40];
-for(int i = 0; i < 4; i++){
-   for(int diag = 0; diag < n; diag += 40){
-      vtf c1 = loada(Cxy,diag);
-      vtf c2 = loada(Cxy,diag+4);
-      vtf c3 = loada(Cxy,diag+8);
-      vtf c4 = loada(Cxy,diag+12);
-      vtf c5 = loada(Cxy,diag+16);
-      vtf c6 = loada(Cxy,diag+20);
-      vtf c7 = loada(Cxy,diag+24);
-      vtf c8 = loada(Cxy,diag+28);
-      vtf c9 = loada(Cxy,diag+32);
-      vtf c10= loada(Cxy,diag+36);
-      for(int offset = 0; offset < diag; offset+=4){
-         t3 += 40;
-         vtf dXY = bcast(dX,offset);
-         vtf dFY = bcast(dF,offset);
-         vtf sY = bcast(s,offset);
- 
-         c1 = mult_add(dXY,loada(dF,offset+diag),c1);
-         c2 = mult_add(dXY,loada(dF,offset+diag)+4,c2);
-         c3 = mult_add(dXY,loada(dF,offset+diag+4),c3);
-         c4 = mult_add(dXY,loada(dF,offset+diag+8),c4);
-         c5 = mult_add(dXY,loada(dF,offset+diag+12),c5);
-         c6 = mult_add(dXY,loada(dF,offset+diag+16),c6);
-         c7 = mult_add(dXY,loada(dF,offset+diag+20),c7);
-         c8 = mult_add(dXY,loada(dF,offset+diag+24),c8);
-         c9 = mult_add(dXY,loada(dF,offset+diag+28),c9);
-         c10= mult_add(dXY,loada(dF,offset+diag+32),c10);
-         
-         vtf s1 = mult(c1,loada(s,offset+diag));
-         vtf s2 = mult(c2,loada(s,offset+diag+4));
-         vtf s3 = mult(c3,loada(s,offset+diag+8));
-         vtf s4 = mult(c4,loada(s,offset+diag+12));
-         vtf s5 = mult(c5,loada(s,offset+diag+16));
-         vtf s6 = mult(c6,loada(s,offset+diag+20));
-         vtf s7 = mult(c7,loada(s,offset+diag+24));
-         vtf s8 = mult(c8,loada(s,offset+diag+28));
-         vtf s9 = mult(c9,loada(s,offset+diag+32));
-         vtf s10= mult(c10,loada(s,offset+diag+36));
-
-         vtf mp1 = max(s1,bcast(output,offset));
-         mp1 = max(mp1,s2);
-         vtf mp2 = max(s3,s4);
-         vtf mp3 = max(s4,s5);
-         vtf mp4 = max(s6,s7);
-         vtf mp5 = max(s8,s9);
-         mp1 = max(mp1,s10);
-         mp2 = max(mp2,mp3);
-         mp4 = max(mp4,mp5);
-         mp1 = max(mp1,mp2);
-         mp1 = max(mp1,mp4); 
-
-         storea(max(s1,loada(a,40*(offset))),a,40*(offset));
-         storea(max(s2,loada(a,40*(offset+1))),a,40*(offset+1));
-         storea(max(s3,loada(a,40*(offset+2))),a,40*(offset+2));
-         storea(max(s4,loada(a,40*(offset+3))),a,40*(offset+3));
-         storea(max(s5,loada(a,40*(offset+4))),a,40*(offset+4));
-         storea(max(s6,loada(a,40*(offset+5))),a,40*(offset+5));
-         storea(max(s7,loada(a,40*(offset+6))),a,40*(offset+6));
-         storea(max(s8,loada(a,40*(offset+7))),a,40*(offset+7));
-         storea(max(s9,loada(a,40*(offset+8))),a,40*(offset+8));
-         storea(max(s10,loada(a,40*(offset+9))),a,40*(offset+9));
-
-         storea(mp1,output,diag+offset);
-      }
-      storea(c1,Cxy,diag);
-      storea(c2,Cxy,diag+4);
-      storea(c3,Cxy,diag+8);
-      storea(c4,Cxy,diag+12);
-      storea(c5,Cxy,diag+16);
-      storea(c6,Cxy,diag+20);
-      storea(c7,Cxy,diag+24);
-      storea(c8,Cxy,diag+28);
-      storea(c9,Cxy,diag+32);
-      storea(c10,Cxy,diag+36);
-      
-      }
-   }
-
-printf("%lu %d \n",t3,n);
-}
 
 void  accumTest4_7_9(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n){
    unsigned long t3 = 0;
@@ -198,7 +25,7 @@ for(int i = 0; i < 4; i++){
       vtf c9 = loada(Cxy,diag+32);
       vtf c10= loada(Cxy,diag+36);
       for(int offset = 0; offset < diag; offset+=4){
-         t3 += 32;
+         t3 += 40;
          vtf dXY = bcast(dX,offset);
          vtf dFY = bcast(dF,offset);
          vtf sY = bcast(s,offset);
@@ -470,26 +297,26 @@ void  accumTest4_7_2(double* Cxy, double* dX, double* dF, double*s, double* outp
    double a[innerWid*16];
    for(int diag = 0; diag < n; diag += innerWid){
       for(int offset = 0; offset+diag < n; offset += 4){
-         vtf dX1 = bcast(dX,offset);
-         vtf dX2 = bcast(dX,offset+1);
-         vtf dX3 = bcast(dX,offset+2);
-         vtf dX4 = bcast(dX,offset+3);
-         vtf dF1 = bcast(dF,offset);
-         vtf dF2 = bcast(dF,offset+1);
-         vtf dF3 = bcast(dF,offset+2);
-         vtf dF4 = bcast(dF,offset+3);
-         vtf s1  = bcast(s,offset);
-         vtf s2  = bcast(s,offset+1);
-         vtf s3  = bcast(s,offset+2);
-         vtf s4  = bcast(s,offset+3);
-         vtf mp1 = bcast(output,offset);
-         vtf mp2 = bcast(output,offset+1);
-         vtf mp3 = bcast(output,offset+2);
-         vtf mp4 = bcast(output,offset+3);
-         vti mpI1 =bcast(outputI[offset]);
-         vti mpI2 =bcast(outputI[offset+1]);
-         vti mpI3 =bcast(outputI[offset+2]);
-         vti mpI4 =bcast(outputI[offset+3]);
+         vtf dX1  = bcast(dX,offset);
+         vtf dX2  = bcast(dX,offset+1);
+         vtf dX3  = bcast(dX,offset+2);
+         vtf dX4  = bcast(dX,offset+3);
+         vtf dF1  = bcast(dF,offset);
+         vtf dF2  = bcast(dF,offset+1);
+         vtf dF3  = bcast(dF,offset+2);
+         vtf dF4  = bcast(dF,offset+3);
+         vtf s1   = bcast(s,offset);
+         vtf s2   = bcast(s,offset+1);
+         vtf s3   = bcast(s,offset+2);
+         vtf s4   = bcast(s,offset+3);
+         vtf mp1  = bcast(output,offset);
+         vtf mp2  = bcast(output,offset+1);
+         vtf mp3  = bcast(output,offset+2);
+         vtf mp4  = bcast(output,offset+3);
+         vti mpI1 = bcast(outputI[offset]);
+         vti mpI2 = bcast(outputI[offset+1]);
+         vti mpI3 = bcast(outputI[offset+2]);
+         vti mpI4 = bcast(outputI[offset+3]);
          for(int subdiag = diag+offset; subdiag <  diag+offset+innerWid; subdiag += 4){
             
             vti ind = _mm256_set_epi64x(subdiag,subdiag+1,subdiag+2,subdiag+3);
@@ -553,34 +380,23 @@ void  accumTest4_7_2(double* Cxy, double* dX, double* dF, double*s, double* outp
             vti e3 = set(6,7,8,9);
             vti e4 = set(10,11,12,13);
             vtf f1 = loada(output,diag);
-            vtf f2 = loada(output,diag+4);
-            vtf f3 = loada(output,diag+8);
-            vtf f4 = loada(output,diag+12);
             vtf d1 = loada(a,i);
             vtf d2 = loada(a,i+4);
             vtf d3 = loada(a,i+8);
             vtf d4 = loada(a,i+12);
-            vtf cmp1 = cmpgtr(f1,d1);
-            vtf cmp2 = cmpgtr(f2,d2);
-            vtf cmp3 = cmpgtr(f3,d3);
-            vtf cmp4 = cmpgtr(f4,d4);
-            d1 = blend(f1,d1,cmp1);
-            e1 = blend(e1,loada(outputI,diag),cmp1);
-            d2 = blend(f2,d2,cmp2);
-            e2 = blend(e2,loada(outputI,diag+4),cmp2);
-            d3 = blend(f3,d3,cmp3);
-            e3 = blend(e3,loada(outputI,diag+8),cmp3);
-            d4 = blend(f4,d4,cmp4);
-            e4 = blend(e4,loada(outputI,diag+12),cmp4);
-         
+            vtf cmp1 = cmpgtr(d1,d2);
+            vtf cmp2 = cmpgtr(d3,d4);
+            d1 = blend(d1,d2,cmp1);
+            e1 = blend(e1,e2,cmp1);
+            d2 = blend(d3,d4,cmp2);
+            e2 = blend(e3,e4,cmp2);
+            cmp1 = cmpgtr(d1,d2);
+            d1 = blend(d1,d2,cmp1);
+            e1 = blend(e1,e2,cmp2);
             storea(d1,output,diag+offset);
             storea(d2,output,diag+offset+4);
-            storea(d3,output,diag+offset+8);
-            storea(d4,output,diag+offset+12);
             storea(e1,outputI,diag+offset);
             storea(e2,outputI,diag+offset+4);
-            storea(e3,outputI,diag+offset+8);
-            storea(e4,outputI,diag+offset+12);
          }
 
          storea(mp1,output,diag+offset);
@@ -588,6 +404,9 @@ void  accumTest4_7_2(double* Cxy, double* dX, double* dF, double*s, double* outp
          storea(mp3,output,diag+offset+8); 
          storea(mp4,output,diag+offset+12);
       }
+   }
+   for(int i = 0; i < n-3000; i += 1000){
+      printf("i: %d Cxy: %lf dX: %lf dF: %lf output: %lf s: %lf outputI: %d\n",Cxy[i], dX[i],dF[i],s[i], output[i],outputI[i]);
    }
    printf("%lu %d \n",t3,n);
 }
