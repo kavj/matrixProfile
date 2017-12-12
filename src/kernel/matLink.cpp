@@ -16,17 +16,22 @@ extern matrixProfileObj* mp_init(int n, int m);
 extern void mp_destroy(matrixProfileObj* mp); 
 */
 
-extern void  accumTest4_4(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
+extern void accumTest4(double* Cxy, double* dX, double* Sxy, double* output, double* fw, double* bw, int n, int m);
 
-extern void  accumTest4_2(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
-extern void  accumTest4(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
-extern void  recursiveTest(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n, int m);
-extern void callKern(double* Cxy, double* dX, double* dF, double* s, double* output, long* outputI, int n);
-extern void  accumTest6(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
-extern void  accumTest7(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
-  
+void  accumTest4_10(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
+extern void  accumTest4_7_16(double* cxy, double* dx, double* df, double*s, double* output, long* outputi,int n);
+extern void  accumTest4_7_12(double* cxy, double* dx, double* df, double*s, double* output, long* outputi,int n);
+extern void  accumTest4_7_18(double* cxy, double* dx, double* df, double*s, double* output, long* outputi,int n);
+extern void  accumTest4_7_16alt(double* cxy, double* dx, double* df, double*s, double* output, long* outputi,int n);
 
-extern void accumTest5(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
+
+extern void  accumTest4_7_11_alt(double* cxy, double* dx, double* df, double*s, double* output, long* outputi,int n);
+extern void  accumTest4_7_11(double* cxy, double* dx, double* df, double*s, double* output, long* outputi,int n);
+
+extern void  accumTest4_7_2(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
+extern void  accumTest4_7_9(double* Cxy, double* dX, double* dF, double*s, double* output, long* outputI,int n);
+extern void  shortconv(double* a, double* b, double* c, int n);
+
 
 static inline double shiftMean(double mu, double a, double b, double m){
     return mu + (a-b)/m;
@@ -148,16 +153,18 @@ int main(int argc, char* argv[]){
 
     double* mu = NULL;
     double* buffer = NULL;
+//    double* bufferB = NULL;
     double* sigmaInv = NULL;
     double* dX = NULL;
     double* dF = NULL;
     long*   bufferI = NULL;
-    posix_memalign((void**)&mu,64,4*n*sizeof(double));
-    posix_memalign((void**)&buffer,64,4*n*sizeof(double));
-    posix_memalign((void**)&sigmaInv,64,4*n*sizeof(double));
-    posix_memalign((void**)&dX,64,4*n*sizeof(double));
-    posix_memalign((void**)&dF,64,4*n*sizeof(double));
-    posix_memalign((void**)&bufferI,64,4*n*sizeof(long));
+    posix_memalign((void**)&mu,64,8*n*sizeof(double));
+    posix_memalign((void**)&buffer,64,8*n*sizeof(double));
+//    posix_memalign((void**)&bufferB,64,4*n*sizeof(double));
+    posix_memalign((void**)&sigmaInv,64,8*n*sizeof(double));
+    posix_memalign((void**)&dX,64,8*n*sizeof(double));
+    posix_memalign((void**)&dF,64,8*n*sizeof(double));
+    posix_memalign((void**)&bufferI,64,16*n*sizeof(long));
     for(int i = 0; i < n; i++){
         buffer[i] = -2*m;
     }
@@ -167,21 +174,14 @@ int main(int argc, char* argv[]){
     clock_t t2 = clock();
     printf("%lf %lf %lf %lf\n",T[n-1],dX[n-m-1],dF[n-m-1],sigmaInv[n-m-1]);
     clock_t t3 = clock();//omp_get_wtime();
- //   #pragma omp parallel for 
-//    for(int i = 0; i < 8; i++){
-      // callKern(T,dX,dF,sigmaInv,buffer,bufferI, n-4*m);
-       accumTest4_4(T, dX, dF, sigmaInv, buffer, bufferI,n);
-
-       //recursiveTest(T, dX, dF, sigmaInv, buffer, bufferI,n,m);
-  
-     //  accumTest7(T, dX, dF, sigmaInv, buffer, bufferI,n-m);
-//    }
+    accumTest4_7_11(T,dX,dF,sigmaInv,buffer,bufferI,n);
     clock_t t4 = clock();//omp_get_wtime();
     printf("done\n");
     printf("test:  %lf\n",(double)(t2-t1)/CLOCKS_PER_SEC);
     printf("test:  %lf\n",(double)(t4-t3)/CLOCKS_PER_SEC);
     free(T);
     free(buffer);
+ //   free(bufferB);
     free(bufferI);
     free(mu);
     free(sigmaInv);
