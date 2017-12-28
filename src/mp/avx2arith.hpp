@@ -222,4 +222,8 @@ static inline __m256d min(__m256d a, __m256d b){
    return _mm256_min_pd(a,b);
 }
 
+static inline __m256d flabs(__m256d a){
+   return _mm256_and_pd(a,_mm256_set1_pd(0x7FFFFFFF));
+}
+
 }
