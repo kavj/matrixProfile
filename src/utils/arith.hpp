@@ -67,7 +67,7 @@ static inline dtype xsub(dtype &a, dtype &b){
 }
 
 template<typename dtype>
-static inline void xsum(dtype *a, vtype s, vtype e, int len){
+static inline void xsum(dtype *a, dtype &s, dtype &e, int len){
    for (int i = stride; i < winlen; i+= stride){
       vtype b = uload(a,i);
       xadd(s,b);
@@ -81,10 +81,10 @@ template<typename dtype>
 void xsum_windowed(dtype *a, dtype *output, int len, int winlen){
    dtype s = 0;
    dtype e = 0;
-   xsum(s,e);
+   xsum(a,s,e);
    output[0] = s + e;
    for (int i = 1; i < len-winlen+1; i++){
-      vtype b = a[i]
+      dtype b = a[i];
       xsub(s,b);
       e += b; 
       b = a[i+winlen];
