@@ -31,6 +31,13 @@ static inline void xsplit(dtype &a,dtype &b){
 // this should probably move to a separate header or the top or something
 #ifdef __FMA__
 template<typename dtype>
+static inline void xmul(dtype &a,dtype &b){
+   dtype c = a*b;
+   b = fms(a,b,c);
+   a = c;
+}
+#else
+template<typename dtype>
 static inline void xmul(dtype &a, dtype &b){
    dtype a_1 = a;
    dtype a_2;
@@ -40,13 +47,6 @@ static inline void xmul(dtype &a, dtype &b){
    xsplit(a_1,a_2);
    xsplit(b_1,b_2);
    b = a_2*b_2 - (((a - a_1*b_1) - a_2*b_1) - a_1*b_2);
-}
-#else
-template<typename dtype>
-static inline void xmul(dtype &a,dtype &b){
-   dtype c = a*b;
-   b = fms(a,b,c);
-   a = c;
 }
 #endif
 
@@ -66,27 +66,31 @@ static inline dtype xsub(dtype &a, dtype &b){
    b = (a - (c - d)) - (b + d);
 }
 
-template<typename dtype,typename vtype>
-dtype xsum(dtype *a, int len){
-   dtype b = 
-   
-}
-
-// vtype is vector type, indicating what type of vector to use
-// this makes no alignment assumptions on the input data, only output
-template<typename dtype, typename vtype, int stride>
-void xsum_windowed(dtype *a, dtype *output, int len, int winlen){
-   vtype s = uload(a,0);
-   vtype e = set(0); 
+template<typename dtype>
+static inline void xsum(dtype *a, vtype s, vtype e, int len){
    for (int i = stride; i < winlen; i+= stride){
       vtype b = uload(a,i);
       xadd(s,b);
-      e = e + b;
+      e += b;
    }
-   astore(s + e,output,0);
-   for (int i = winlen; i < len; i += stride){
-      vtype b = uload(a,i-winlen);
-      
+}
+
+
+// simd doesn't help with a simple windowed sum method
+template<typename dtype>
+void xsum_windowed(dtype *a, dtype *output, int len, int winlen){
+   dtype s = 0;
+   dtype e = 0;
+   xsum(s,e);
+   output[0] = s + e;
+   for (int i = 1; i < len-winlen+1; i++){
+      vtype b = a[i]
+      xsub(s,b);
+      e += b; 
+      b = a[i+winlen];
+      xadd(s,b);
+      e += b;
+      output[i] = s + e;
    }
 }
 
