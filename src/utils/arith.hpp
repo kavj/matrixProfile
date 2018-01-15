@@ -5,14 +5,17 @@
 
 // The first argument is always updated with the resulting sum or product and the second is updated to reflect the error term.
 using namespace vmth;
-#define fact 134217728 
+#define fact 2 << 27 
 
 
 // not sure if it's legal to use an enumerated type in second arg
 template<typename dtype>
 static inline double factor(dtype a){
    // this needs to be made compliant with vector types, perhaps by overloading set(scalar) for scalar operands
-   return _mm256_castsi256_pd(bcast(fact))*a;
+   //dtype b = static_cast<dtype>(a);
+   static const dtype c = bcast(static_cast<dtype>(fact));
+   return a*c;
+//   return _mm256_castsi256_pd(bcast(fact))*a;
 }
 
 template<typename dtype>
@@ -25,7 +28,9 @@ static inline void xadd(dtype &a, dtype &b){
 
 template<typename dtype>
 static inline void xsplit(dtype &a,dtype &b){
-   dtype f = factor(a);
+   dtype f = setzero(); 
+   
+//   __m256d f = factor<__m256d>(a);
    b = (f - (f - a));
    a = a - f;
 }
