@@ -1,10 +1,10 @@
-#include "../mp/avx2arith_2.hpp"
+#include "../arch/avx2arith_2.hpp"
 
 // Collection of in place 2 operand arithmetic and sliding window sum and average. These are based on 
 // ACCURATE SUM AND DOT PRODUCT Ogita et al
 
 // The first argument is always updated with the resulting sum or product and the second is updated to reflect the error term.
-
+using namespace vmth;
 #define fact 134217728 
 
 
@@ -12,14 +12,14 @@
 template<typename dtype>
 static inline double factor(dtype a){
    // this needs to be made compliant with vector types, perhaps by overloading set(scalar) for scalar operands
-   return fact*a;
+   return _mm256_castsi256_pd(bcast(fact))*a;
 }
 
 template<typename dtype>
 static inline void xadd(dtype &a, dtype &b){
    dtype c = a + b;
    dtype d = c - a;
-   b = (a - (c - d)) + (b - d);
+   b = ((a - (c - d)) + (b - d));
    a = c;
 }
 
@@ -49,21 +49,6 @@ static inline void xmul(dtype &a,dtype &b){
 #endif
 }
 
-template<typename dtype>
-static inline dtype xadd(dtype &a, dtype &b){
-   dtype c = a + b;
-   dtype d = c - a;
-   b = (a - (c - d)) + (b - d);
-   a = c;
-}
-
-// double check this one
-template<typename dtype>
-static inline dtype xsub(dtype &a, dtype &b){
-   dtype c = a - b;
-   dtype d = c - a;
-   b = (a - (c - d)) - (b + d);
-}
 
 template<typename dtype>
 void xsum(dtype *a, dtype &s, dtype &e, int len){
@@ -75,49 +60,61 @@ void xsum(dtype *a, dtype &s, dtype &e, int len){
 }
 
 template<typename dtype, typename vtype>
-void xssq(dtype *a, dtype *b, dtype *output, int winlen){
-   int mlen = n - winlen + 1;
-   vtype z = bcast(b,0);
-   vtype p = uload(a,0) - z;
-   vtype s = x;
-   xmul(x,y);
-   for(int i = 1; i < winlen; i++){
-      vtype h = uload(a,i) - z;
-      vtype r = h;
-      xadd(x,
+static inline vtype xsInv_kern(dtype *a, dtype *mu, dtype *sI, int offset, long winlen){
+   vtype z = uload(mu,offset);
+   vtype p = uload(a,offset) - z;
+   vtype s = p;
+   xmul(p,s);
+   dtype u = static_cast<dtype>(winlen);
+   vtype t = bcast(u);
+ //  ustore(t,sI,0);
+   for(int j = offset+1; j < offset+winlen; j++){
+       vtype h = uload(a,j) - z;
+       vtype r = h;
+       xmul(h,r);
+       xadd(p,h);
+       s += (h+r);
    }
+   p += s;
+  
+   return p;
 }
 
 
-// simd isn't worthwhile with a simple windowed sum method, particularly because it makes error analysis harder
+template<typename dtype>
+void xsInv(dtype *a, dtype *mu, dtype *sI, int len, int winlen){
+   
+   int k = len - winlen + 1;
+   long z = static_cast<long>(winlen);
+   k -= k%8;
+   #pragma omp parallel for
+   for(int i = 0; i < k; i+=8){
+      ustore(xsInv_kern<dtype,__m256d>(a,mu,sI,i,z),sI,i);
+      ustore(xsInv_kern<dtype,__m256d>(a,mu,sI,i+4,z),sI,i+4);
+   }
+//   if(k < (len-winlen+1){
+
+//   }
+}
+
+
 template<typename dtype>
 void xmean_windowed(dtype *a, dtype *output, int len, int winlen){
+   int mlen = len - winlen + 1;
    dtype s = 0;
    dtype e = 0;
-   xsum(a,s,e);
-   vtype = bcast(winlen);
+   xsum(a,s,e,winlen);
    output[0] = (s + e)/winlen;
-   for (int i = 1; i < len-winlen+1; i++){
-      dtype b = a[i];
-      xsub(s,b);
+   for (int i = winlen; i < len; i++){
+      dtype b = -1*a[i-winlen];
+      xadd(s,b);
+     // xsub(s,b);
       e += b; 
-      b = a[i+winlen];
+      b = a[i];
       xadd(s,b);
       e += b;
-      output[i] = (s + e)/winlen;
+      output[i-winlen+1] = (s + e)/winlen;
    }
-}
-
-
-// this should mainly  be vectorized if we're allowed to use fused multiply add
-template<typename dtype, typename vtype>
-void xvar_windowed(dtype *a, dtype *b, int len, int wlen){
-   vtype s = setzero(); // setzero();
-   vtype e = setzero();   //setzero();
-   for(int i = 0; i < wlen; i++){
-      
-   }
-
 }
 
 
