@@ -1,6 +1,0 @@
-
-
-
-void sliding_dot(){
-
-} 
