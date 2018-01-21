@@ -8,6 +8,41 @@ typedef  __m256d vtf;
 typedef  __m256i vti;
 
 
+// rework this for alignment checks later. For now assume aligned
+static inline void pack_4s(double *src, double *dst, int i){
+   __m256d aa = aload(src,i);
+   __m256d ab = preshuffle(aa,aload(src,i+4));
+   __m256d ac = shift2(aa,ab);
+           ab = shift1(aa,ab);
+   __m256d ad = uload(src,i+3);
+   astore(aa,dst,4*i);
+   astore(ab,dst,4*(i+1));
+   astore(ac,dst,4*(i+2));
+   astore(ad,dst,4*(i+3));
+}
+
+
+template<typename vt>
+static inline void fma_4x4(vtf &c1, vtf& c2, vtf &c3, vtf &c4,vt &H, double *dg, int i){
+ /*  __m256d aa = aload(dg,i);
+   __m256d ab = preshuffle(aa,aload(dg,i+4));
+   __m256d ac = shift2(aa,ab);
+           ab = shift1(aa,ab);
+   __m256d ad = uload(dg,i+3);
+
+   c1 = fma(H,aa,c1);
+   c2 = fma(H,ab,c2);
+   c3 = fma(H,ac,c3);
+   c4 = fma(H,ad,c4);
+*/
+   c1 = fma(H,aload(dg,i),c1);
+   c2 = fma(H,aload(dg,i+4),c2);
+   c3 = fma(H,aload(dg,i+8),c3);
+   c4 = fma(H,aload(dg,i+12),c4);
+
+}
+
+
 
 static inline void fma_4x4(vtf &c1, vtf& c2, vtf &c3, vtf &c4, vtf &x1, vtf &x2, vtf &x3, vtf &x4, double *d, int i){
    c1 = fma(x1,aload(d,i),c1);
@@ -15,6 +50,18 @@ static inline void fma_4x4(vtf &c1, vtf& c2, vtf &c3, vtf &c4, vtf &x1, vtf &x2,
    c3 = fma(x3,aload(d,i+8),c3);
    c4 = fma(x4,aload(d,i+12),c4);
 }
+
+
+
+template<typename dtype, typename vt>
+static inline void fma_8x1(vt &c1, vt& c2, vt &c3, vt &c4, vt &c5, vt &c6, vt &c7, vt &c8, 
+                           vt H, dtype *dg, int i){
+
+   fma_4x4(c1,c2,c3,c4,H,dg,i);
+   fma_4x4(c5,c6,c7,c8,H,dg,i+16);
+
+}
+
 
 
 template<typename dtype, typename vt>
@@ -153,6 +200,23 @@ static inline void load_8x1(vt &c1, vt &c2, vt &c3, vt &c4, vt &c5, vt &c6, vt &
    load_4x4(c1,c2,c3,c4,d,i+16);
 }
 
+
+template<typename dtype, typename vt>
+static inline void uload_4x4(vt &c1, vt &c2, vt &c3, vt &c4, dtype *d, int i){
+   c1 = uload(d,i);
+   c2 = uload(d,i+4);
+   c3 = uload(d,i+8);
+   c4 = uload(d,i+12);
+}
+
+template<typename dtype, typename vt>
+static inline void uload_8x1(vt &c1, vt &c2, vt &c3, vt &c4, vt &c5, vt &c6, vt &c7, vt &c8, dtype *d, int i){
+   uload_4x4(c1,c2,c3,c4,d,i);
+   uload_4x4(c1,c2,c3,c4,d,i+16);
+}
+
+
+
 static inline void shuffle_fwd_8(vtf &c1, vtf &c2, vtf &c3, vtf &c4, vtf &c5, vtf &c6, vtf &c7, vtf &c8, double *d, int i){
    c8 = c7;
    c7 = c6;
@@ -179,95 +243,56 @@ static inline void store_8(vt &c1, vt &c2, vt &c3, vt &c4, vt &c5, vt &c6, vt &c
    store_4(c5,c6,c7,c8,d,i+16);
 }
 
-
-static inline void shuffle_fwd_4(vtf &a, vtf &b, vtf &c, vtf &d, double*e, int i){
-   d = c;
-   c = b;
-   b = a;
-   a = aload(d,i);
-}
-
-
-static inline void fma_2(vtf &c1, vtf& c2, vtf &x1, vtf &x2, double *d, int i){
-   c1 = fma(x1,aload(d,i),c1);
-   c2 = fma(x2,aload(d,i+4),c2);
-}
-
-static inline void prod_2(vtf &c1, vtf& c2, vtf &x1, vtf &x2){
-   c1 *= x1;
-   c2 *= x2;
-}
-
-static inline void prod_2(vtf &c1, vtf& c2, double *d, int i){
-   c1 *= aload(d,i);
-   c2 *= aload(d,i+4);
-}
-
-static inline void load_2(vtf &c1, vtf &c2, double *d, int i){
-   c1 = aload(d,i);
-   c2 = aload(d,i+4);
-}
-
-static inline void shuffle_fwd_2(vtf &c1, vtf &c2, double*d, int i){
-   c2 = c1;
-   c1 = aload(d,i);
-}
-
-static inline void store_2(vtf &c1, vtf &c2, double *d, int i){
-   astore(c1,d,i);
-   astore(c2,d,i+4);
-}
-
 // with high register count variations, we should try using memory operands for s on both passes.
 
-static inline void xcorr_kern(double *cx, double *dx, double *df, double *s, double *buf, int diag, int offset, int n, int m){
-    vtf ca,cb,cc,cd,ce,cf,cg,ch;
+
+//static inline void lb_kern(double *x, double *dx
+
+//static inline void reduce_k(vtf &aa, vtf &ab, vtf &ac, vtf &ad, vtf &ae
+
+
+
+static inline void xcorr_kern(double *cx, double *dx, double *df, double *s, double *buf, double *output, int diag, int offset, int n, int m){
+    vtf ca,cb,cc,cd,ce,cf,cg,ch,ci,cj,ck,cl;
+    int z = offset+diag;
     load_8x1(ca,cb,cc,cd,ce,cf,cg,ch,cx,diag);
-    vtf xa, xb, xc, xd, xe, xf, xg, xh,
-        fa, fb, fc, fd, fe, ff, fg, fh;
-    load_8x1(xa,xb,xc,xd,xe,xf,xg,xh,dx,diag+offset);
-    load_8x1(fa,fb,fc,fd,fe,ff,fg,fh,df,diag+offset);
-    for(int k = 0; k < 128; k+= 4){
-        int p = offset+diag+k;
-        int q = offset+k;
+    for(int k = 0; k < 256; k+=4 ){
+        int p = z+k;
+        vtf fbc = bcast(dx,offset+k);        
         fma_8x1(ca,cb,cc,cd,ce,cf,cg,ch,
-                xa,xb,xc,xd,xe,xf,xg,xh,df,q);
+                fbc,df,p);
+        fbc = bcast(df,offset+k);
         fma_8x1(ca,cb,cc,cd,ce,cf,cg,ch,
-                fa,fb,fc,fd,fe,ff,fg,fh,dx,q);
-        vtf d1,d2,d3,d4,d5,d6,d7,d8;
-        load_8x1(d1,d2,d3,d4,d5,d6,d7,d8,s,q);
-        prod_8x1(ca,cb,cc,cd,ce,cf,cg,ch,d1,d2,d3,d4,d5,d6,d7,d8);
-        prod_8x1(d1,d2,d3,d4,d5,d6,d7,d8,s,p);
-        store_8(d1,d2,d3,d4,d5,d6,d7,d8,buf,offset+8*k);   
-        astore(ch,cx,diag+k);
-        shuffle_fwd_8(ca,cb,cc,cd,ce,cf,cg,ch,cx,diag+k);
-    }
-    store_8(ca,cb,cc,cd,ce,cf,cg,ch,cx,diag+128);
+                fbc,dx,p);
+        
+        vtf da,db,dc,dd, de,df,dg,dh;
+        load_8x1(da,db,dc,dd,de,df,dg,dh,s,p);
+        // store_8(ca,cb,cc,cd,
+        //    ce,cf,cg,ch,cx,diag+128);
+        prod_8x1(da,db,dc,dd,de,df,dg,dh,
+                 ca,cb,cc,cd,ce,cf,cg,ch);
+        da = max(da,db);
+        db = max(dc,dd);
+        dc = max(de,df);
+        dd = max(dg,dh);
+        de = max(da,db);
+        df = max(dc,dd);
+        dg = max(de,df);
+        astore(dg,output,diag+offset+8*k);
+   }
+    store_8(ca,cb,cc,cd,
+            ce,cf,cg,ch,cx,diag+128);
 }
 
-static void reduce_kern(double *a, double *output, long *outputi, int diag, int offset,int n, int m){
-    vtf m1, m2, m3, m4,
-        ca, cb, cc, cd;
-    vti i1, i2, i3, i4; 
-    load_4x4(m1,m2,m3,m4,output,offset);
-    load_4x4(i1,i2,i3,i4,outputi,offset);
-    for(int k = 0; k < 512; k += 16){
-        load_4x4(ca,cb,cc,cd,a,offset+k);
-        max_4x4(m1,m2,m3,m4,ca,cb,cc,cd);
-        cmp_4x4(ca,cb,cc,cd,m1,m2,m3,m4);
-        seti_4x4(i1,i2,i3,i4,ca,cb,cc,cd,offset+8*k);
-    }
-    store_4(m1,m2,m3,m4,output,offset);
-    store_4(i1,i2,i3,i4,outputi,offset);
-}
 
 void  accumTest4_7_10(double* cx,double* dx, double* df, double*s, double* a, double* output, long* outputi,int n, int m){
    unsigned long t= 0;
    int offset = 0;
-   for(int diag = 0; diag < n-32*m; diag += 32){
-      for(int offset = 0; offset < n-32*m; offset += 64){
-         xcorr_kern(cx,dx,df,s,a,diag,offset,n,m);
-         reduce_kern(a,output,outputi,diag,offset,n,m);
+   //printf("n
+   #pragma omp parallel for  
+   for(int diag = 0; diag < n-4*m; diag += 32){
+      for(int offset = 0; offset < n-4*m; offset+=64){
+         xcorr_kern(cx,dx,df,s,a,output,diag,offset,n,m);
       }
    }     
    printf("iterations: %lu\n",t);
