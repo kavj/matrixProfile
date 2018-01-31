@@ -28,7 +28,6 @@ void mpkern(double* __restrict__ cx, const double* __restrict__ dx, const double
 }
 */
 
-template<typename ft, typename it>
 void mpkern2(double* __restrict__ cx, const double* __restrict__ dx, const double* __restrict__ xf, double* __restrict__ s, double* __restrict__ buf, int diag, int offset){
    cx = (double*)__builtin_assume_aligned(cx,64);
    dx = (double*)__builtin_assume_aligned(dx,64);
@@ -88,16 +87,18 @@ void mpkern2(double* __restrict__ cx, const double* __restrict__ dx, const doubl
          cx[i+8] = ci;
          cx[i+9] = cj;
 
-         ca *= s[i];
-         cb *= s[i+1];
-         cc *= s[i+2];
-         cd *= s[i+3];
-         ce *= s[i+4];
-         cf *= s[i+5];
-         cg *= s[i+6];
-         ch *= s[i+7];
-         ci *= s[i+8];
-         cj *= s[i+9];
+         bcst = s[i]; 
+
+         ca *= bcst;
+         cb *= bcst;
+         cc *= bcst;
+         cd *= bcst;
+         ce *= bcst;
+         cf *= bcst;
+         cg *= bcst;
+         ch *= bcst;
+         ci *= bcst;
+         cj *= bcst;
          
          ca *= s[k];
          cb *= s[k+1];
