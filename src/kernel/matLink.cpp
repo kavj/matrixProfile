@@ -1,10 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
-#include<immintrin.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<unistd.h>
 #include<time.h>
-#include<math.h>
 #include<omp.h>
 #include "../utils/xprec_math.hpp"
 #include "../utils/repack.hpp"
@@ -18,7 +16,7 @@ extern void  accumTest4_7_10(double* cx,double* dx, double* df, double*s, double
 
 
 
-static inline void pack4s(double *src, double *dst, int i){
+/*static inline void pack4s(double *src, double *dst, int i){
    __m256d aa = aload(src,i);
    __m256d ab = preshuffle(aa,aload(src,i+4));
    __m256d ac = shift2(aa,ab);
@@ -29,7 +27,7 @@ static inline void pack4s(double *src, double *dst, int i){
    astore(ac,dst,4*(i+2));
    astore(ad,dst,4*(i+3));
 }
-
+*/
 
 
 void initDXDF(double* x,double* mu, double* dF, double* dX,int n, int m){    
@@ -125,14 +123,14 @@ int main(int argc, char* argv[]){
     unfold(sigmaInv,sigmaInvk,n);
     unfold(dX,dXk,n);
     unfold(dF,dFk,n);
-
+    printf("check2\n");
+    clock_t t1 = clock();
     accumTest4_7_10(T,dXk,dFk,sigmaInvk,ak,bufferk,bufferI,n,256);
+    clock_t t2 = clock();
 #else
 
 #endif
 
-    clock_t t1 = clock();
-    clock_t t2 = clock();
     printf("%lf %lf %lf %lf\n",T[n-1],dX[n-m-1],dF[n-m-1],sigmaInv[n-m-1]);
     clock_t t3 = clock();
     clock_t t4 = clock();
