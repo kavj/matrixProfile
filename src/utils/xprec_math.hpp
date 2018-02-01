@@ -31,23 +31,6 @@ static inline void xmul(dtype &a, dtype &b){
    a = c;
 }
 
-#ifdef __FMA__
-static inline void xmul(__m256d &a,__m256d &b){
-   __m256d c = a*b;
-   b = vmth::fms(a,b,c);
-   a = c;
-}
-#endif
-
-
-void xsum(float *a, float &s, float &e, int len){
-   for (int i = 0; i < len; i++){
-      float b = a[i];
-      xadd(s,b);
-      e += b;
-   }
-}
-
 void xsum(double *a, double &s, double &e, int len){
    for (int i = 0; i < len; i++){
       double b = a[i];
@@ -56,30 +39,8 @@ void xsum(double *a, double &s, double &e, int len){
    }
 }
 
-
-template<typename dtype, typename vtype, typename indextype>
-static inline vtype xsInv_simd(dtype *a, dtype *mu, dtype *sI, int offset, indextype winlen){
-   vtype z = vmth::uload(mu,offset);
-   vtype p = vmth::uload(a,offset) - z;
-   vtype s = p;
-   xmul(p,s);
- //  dtype u = static_cast<dtype>(winlen);
- //  vtype t = bcast(u);
-   for(int j = offset+1; j < offset+winlen; j++){
-       vtype h = vmth::uload(a,j) - z;
-       vtype r = h;
-       xmul(h,r);
-       xadd(p,h);
-       s += (h+r);
-   }
-   p += s;
-   p = p/vmth::bcast(static_cast<dtype>(winlen));
-   p = sqrt(p); 
-   return p;
-}
-
-template<typename dtype,typename indextype>
-static inline dtype xsInv_scalar(dtype *a, dtype *mu, dtype *sI, int offset, indextype winlen){
+template<typename dtype>
+static inline dtype xsInv_scalar(dtype *a, dtype *mu, dtype *sI, int offset, int winlen){
    dtype z = mu[offset];
    dtype p = a[offset] - z;
    dtype s = p;
@@ -93,25 +54,16 @@ static inline dtype xsInv_scalar(dtype *a, dtype *mu, dtype *sI, int offset, ind
    }
    p += s;
    p = p/(static_cast<dtype>(winlen));
-   p = vmth::sqrt(p); 
+   p = sqrt(p); 
    return p;
 }
 
 
-// This file is way too messy. I should just split the vector and 
 template<typename dtype>
 void xsInv(dtype *a, dtype *mu, dtype *sI, int len, int winlen){
    int k = len - winlen + 1;
-   long z = static_cast<long>(winlen);
-   int m = k - k%8;
    #pragma omp parallel for
-   for(int i = 0; i < m; i+=8){
-      
-      vmth::ustore(xsInv_simd<dtype,__m256d>(a,mu,sI,i,z),sI,i);
-      vmth::ustore(xsInv_simd<dtype,__m256d>(a,mu,sI,i+4,z),sI,i+4);
-      
-   }
-   for(int i = m; i < k; i++){
+   for(int i = 0; i < k; i++){
       sI[i] = xsInv_scalar(a,mu,sI,i,winlen);
    }
 }
@@ -145,5 +97,4 @@ void xmean_windowed(dtype *a, dtype *output, int len, int winlen){
       output[i-winlen+1] = (rsum + addrem)/winlen;
    }
 }
-
 
