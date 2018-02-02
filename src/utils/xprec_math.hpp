@@ -23,7 +23,6 @@ static inline void xsplit(double &a,double &b){
    a = a - f;
 }
 
-// this should probably move to a separate header or the top or something
 template<typename dtype>
 static inline void xmul(dtype &a, dtype &b){
    dtype c = a*b;
@@ -53,8 +52,7 @@ static inline dtype xsInv_scalar(dtype *a, dtype *mu, dtype *sI, int offset, int
        s += (h+r);
    }
    p += s;
-   p = p/(static_cast<dtype>(winlen));
-   p = sqrt(p); 
+   p = 1/sqrt(p); 
    return p;
 }
 
