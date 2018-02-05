@@ -74,7 +74,7 @@ void init_dfdx(dtype *a, dtype* mu, dtype *df, dtype *dx, int w, int n){
    dx[0] = 0;
    for(int i = 0; i < n-w; i++){
       df[i+1] = (a[i+w] - mu[i+1]) + (a[i]-mu[i]);
-      dx[i+1] = (1/2)*(a[i+w] - a[i]);
+      dx[i+1] = (a[i+w] - a[i])/2.0;
    }
 }
 
