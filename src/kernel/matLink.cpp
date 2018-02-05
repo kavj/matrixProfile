@@ -12,9 +12,11 @@
 
 /* Use wc -l <filename> to get the number of lines in a single column csv. Pass it as argument 2 here.*/
 
-extern void  accumTest4_7_10(double* cx,double* dx, double* df, double*s, double* a, double* output, long* outputi,int n, int m);
+//extern void  accumTest4_7_10(double* cx,double* dx, double* df, double*s, double* a, double* output, long*;outputi,int n, int m);
 
-
+typedef double dt;
+typedef long dti;
+extern void solvempref(dt *a, dt *cx, dt *mu, dt *df, dt *dx, dt *s, dt *mp, dti *mpi, int len, int diagmin, int sublen);
 
 /*static inline void pack4s(double *src, double *dst, int i){
    __m256d aa = aload(src,i);
@@ -30,12 +32,12 @@ extern void  accumTest4_7_10(double* cx,double* dx, double* df, double*s, double
 */
 
 
-void initDXDF(double* x,double* mu, double* dF, double* dX,int n, int m){    
+/*void initDXDF(double* x,double* mu, double* dF, double* dX,int n, int m){    
     for(int i = 0; i < n-m; i++){
         dX[i] = (1/2)*x[i+m]-x[i];
         dF[i] = (x[i+m]-mu[i+1]) + (x[i]-mu[i]);
     }
-}
+}*/
 
 
 void writeDoubles(const char* name, double* t, int n){
@@ -50,7 +52,7 @@ void writeDoubles(const char* name, double* t, int n){
     fclose(f);
 }
 
-void writeInts(const char* name, int* t, int n){
+void writeInts(const char* name, long* t, int n){
     FILE* f = fopen(name,"w");
     if(f == NULL){
         perror("fopen");  
@@ -84,14 +86,14 @@ int main(int argc, char* argv[]){
     }    
     printf("check1\n");
     fclose(f);
-    double* a = NULL;
+    double* cx = NULL;
     double* mu = NULL;
     double* buffer = NULL;
     double* sigmaInv = NULL;
     double* dX = NULL;
     double* dF = NULL;
     long*   bufferI = NULL;
-    posix_memalign((void**)&a,64,n*sizeof(double));
+    posix_memalign((void**)&cx,64,n*sizeof(double));
     posix_memalign((void**)&mu,64,n*sizeof(double));
     posix_memalign((void**)&buffer,64,n*sizeof(double));
     posix_memalign((void**)&sigmaInv,64,n*sizeof(double));
@@ -101,8 +103,10 @@ int main(int argc, char* argv[]){
 
     xmean_windowed(T,mu,n,m); 
     xsInv(T, mu, sigmaInv, n, m);   
-    initDXDF((double*)T, (double*)mu, (double*)dF, (double*)dX, n, m);
-#ifdef __AVX2__ 
+    
+    
+    init_dfdx(T,mu, dF, dX, m, n);
+/*#ifdef __AVX2__ 
     double *ak = NULL;
     double *muk= NULL;
     double *bufferk = NULL;
@@ -117,19 +121,34 @@ int main(int argc, char* argv[]){
     posix_memalign((void**)&dXk,64,4*n*sizeof(double));
     posix_memalign((void**)&dFk,64,4*n*sizeof(double));
  
+    //writeDoubles("mu.csv",mu,(n-m+1));
+    //writeDoubles("xsInv.csv",sigmaInv,n-m+1);
     unfold(a,ak,n);
     unfold(mu,muk,n); 
     unfold(buffer,bufferk,n);
     unfold(sigmaInv,sigmaInvk,n);
     unfold(dX,dXk,n);
     unfold(dF,dFk,n);
-    printf("check2\n");
+*/    printf("check2\n");
     clock_t t1 = clock();
-    accumTest4_7_10(T,dXk,dFk,sigmaInvk,ak,bufferk,bufferI,n,256);
+    for(int i = 0; i < n-m+1; i++){
+       buffer[i] = -1;
+       bufferI[i] = -1;
+    }       
+    //solvempref(T,cx,mu,dF,dX,sigmaInv,buffer,bufferI,n,m,m);
+//    accumTest4_7_10(T,dXk,dFk,sigmaInvk,ak,bufferk,bufferI,n,256);
     clock_t t2 = clock();
-#else
-
-#endif
+//#else
+    for(int i = 0; i < 40000; i += 1000){
+       printf("%lf %d\n",buffer[i],bufferI[i]);
+    }
+//#endif
+    writeDoubles("dX.csv",dX,n-m+1);
+    writeDoubles("sigmaInv.csv",sigmaInv,n-m+1);
+    writeDoubles("mu.csv",mu,n-m+1);
+    writeDoubles("dF.csv",dF,n-m+1);
+   // writeDoubles("buffer.csv",buffer,n-m+1);
+   // writeInts("bufferI.csv",bufferI,n-m+1);
 
     printf("%lf %lf %lf %lf\n",T[n-1],dX[n-m-1],dF[n-m-1],sigmaInv[n-m-1]);
     clock_t t3 = clock();
@@ -140,20 +159,21 @@ int main(int argc, char* argv[]){
     printf("test:  %lf\n",(double)(t2-t1)/CLOCKS_PER_SEC);
     printf("test blocking in 4s:  %lf\n",(double)(t4-t3)/CLOCKS_PER_SEC);
     printf("test blocking in 8s:  %lf\n",(double)(t6-t5)/CLOCKS_PER_SEC);
-    writeDoubles("meancheck2.csv",muk,4*(n-m+1));
     free(T);
+    free(cx);
     free(buffer);
     free(bufferI);
     free(mu);
     free(sigmaInv);
     free(dX);
     free(dF);
-#ifdef __AVX2__
+/*#ifdef __AVX2__
     free(ak);
     free(muk);
     free(bufferk);
     free(sigmaInvk);
 #endif
+*/
     return 0;
 
 }
