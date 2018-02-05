@@ -1,6 +1,7 @@
 #include<cmath>
 #include<stdint.h>
 #include "../arch/avx2arith_2.hpp"
+#pragma once
 //#include <cmath>
 // Collection of in place 2 operand arithmetic and sliding window sum and average. These are based on 
 // ACCURATE SUM AND DOT PRODUCT Ogita et al
