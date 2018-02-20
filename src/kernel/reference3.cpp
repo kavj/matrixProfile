@@ -48,24 +48,21 @@ static inline void solvetile(dt* __restrict__ cx, const dt* __restrict__ df, con
       }
       for(int offset = om; offset < om+len; offset++){
          int k = offset+diag;
-         dt ea = dx[offset];
+         dt ra = dx[offset];
          for(int i = 0; i < unroll; i++){
-           cov(i) += ea*df[k+i];
+           cov(i) += ra*df[k+i];
          } 
-         ea = df[offset];
+         ra = df[offset];
          for(int i = 0; i < unroll; i++){
-           cov(i) += ea*df[k+i];
-         } 
-         for(int i = 0; i < unroll; i++){
-           cov(i) += ea*df[k+i];
+           cov(i) += ra*dx[k+i];
          } 
          reg_block<double> corr;
          for(int i = 0; i < unroll; i++){
             corr(i) = cov(i) * s[k+i];
          } 
-         ea = s[offset];
+         ra = s[offset];
          for(int i = 0; i < unroll; i++){
-            corr(i) = cov(i) * ea;
+            corr(i) = cov(i) * ra;
          }
          for(int i = 0; i < unroll; i++){
             if(mp[k+i] < corr(i)){
