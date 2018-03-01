@@ -127,15 +127,7 @@ static inline __m256i set(long i, long j, long k, long l){
 static inline __m256d setzero(void){
    return _mm256_setzero_pd();
 }
-/*
-static inline __m128d extractlo(__m256d a){
-   return _mm256_extract128_pd(a,0);
-}*/
-/*
-static inline __m256d testnz(__m256d a){
 
-}
-*/
 }
 
 

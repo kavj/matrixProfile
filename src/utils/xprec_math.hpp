@@ -2,12 +2,11 @@
 #include<stdint.h>
 #include "../arch/avx2arith_2.hpp"
 #pragma once
-//#include <cmath>
+
 // Collection of in place 2 operand arithmetic and sliding window sum and average. These are based on 
 // ACCURATE SUM AND DOT PRODUCT Ogita et al
 
-// The first argument is always updated with the resulting sum or product and the second is updated to reflect the error term.
-//using namespace vmth;
+
 
 
 template<typename dtype>
