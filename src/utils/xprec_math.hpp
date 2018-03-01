@@ -1,6 +1,5 @@
 #include<cmath>
 #include<stdint.h>
-#include "../arch/avx2arith_2.hpp"
 #pragma once
 //#include <cmath>
 // Collection of in place 2 operand arithmetic and sliding window sum and average. These are based on 
@@ -31,7 +30,7 @@ static inline void xmul(dtype &a, dtype &b){
    a = c;
 }
 
-void xsum(double *a, double &s, double &e, int len){
+static inline void xsum(double *a, double &s, double &e, int len){
    for (int i = 0; i < len; i++){
       double b = a[i];
       xadd(s,b);
@@ -53,7 +52,7 @@ static inline dtype xsInv_scalar(dtype *a, dtype *mu, dtype *sI, int offset, int
        s += (h+r);
    }
    p += s;
-   p = 1/sqrt(p); 
+   p = 1.0/sqrt(p); 
    return p;
 }
 
