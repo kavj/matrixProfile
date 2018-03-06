@@ -41,42 +41,43 @@ static inline void solvetile(dt* __restrict__ cx, const dt* __restrict__ df, con
    s  = (dt*)__builtin_assume_aligned(s,64);
    mp =(dt*)__builtin_assume_aligned(mp,64);
    mpi = (dti*)__builtin_assume_aligned(mpi,64);
-   const int unroll = 10; 
+   const int unroll = 8; 
    //const int stride = 4;
    for(int diag = dm; diag < dm+len; diag+=unroll){
       reg_block<__m256d> cov;
       for(int i = 0; i < unroll; i++){
-         cov(i) = uload(cx,diag+i);
+         cov(i) = aload(cx,diag+i*stride);
       }
       for(int offset = om; offset < om+len; offset++){
          int k = offset+diag;
          __m256d ra = uload(dx,k);
-         for(int i = 0; i < unroll; i+= stride){
-           cov(i) = mul_add(ra,brdcst(df,offset+i),cov(i));
+         for(int i = 0; i < unroll; i++){
+           cov(i) = mul_add(ra,brdcst(df,offset+i*stride),cov(i));
          }
          ra = uload(df,k);
-         for(int i = 0; i < unroll; i+= stride){
-            cov(i) = mul_add(ra,brdcst(dx,offset+i),cov(i));
+         for(int i = 0; i < unroll; i++){
+            cov(i) = mul_add(ra,brdcst(dx,offset+i*stride),cov(i));
          }
          reg_block<__m256d> corr;
-         for(int i = 0; i < unroll; i+= stride){
-           corr(i) = cov(i)*brdcst(s,k+i);
+         for(int i = 0; i < unroll; i++){
+           corr(i) = cov(i)*brdcst(s,k+i*stride);
          }
          ra = uload(s,k);
-         for(int i = 0; i < unroll; i+= stride){
-           corr(i) = cov(i)*ra;
+         for(int i = 0; i < unroll; i++){
+           corr(i) = corr(i)*ra;
          }
          const double ones[4] = {0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF};
          __m256d onecheck = aload(ones,0);
 
          for(int i = 0; i < unroll; i++){
-            if(_mm256_testz_pd(onecheck,cmpgtr(corr(i),brdcst(mp,offset+i)))){
-            //   mpi[k+i] = offset;
-               ustore(vmax(corr(i),brdcst(mp,offset+i)),mp,offset+i*stride);
+            __m256d blah = cmpgtr(corr(i),brdcst(mp,offset+i*stride));
+            if(_mm256_testz_pd(onecheck,blah)){
+               ustore(blend(uload(mpi,k+i),brdcst(offset),blah));
+               ustore(blend(corr(i),brdcst(mp,offset+i*stride),blah),mp,offset+i*stride);
             }
          }
-    //     reg_block<long> index;
-  /*       for(int i = 0; i < unroll; i+=2){
+         reg_block<long> index;
+         for(int i = 0; i < unroll; i+=2){
             if(corr(i) < corr(i+1)){
               // index(i) = k+i+1;
                corr(i) = corr(i+1);
@@ -84,19 +85,19 @@ static inline void solvetile(dt* __restrict__ cx, const dt* __restrict__ df, con
          }
          for(int i = 0; i < unroll; i+=4){
             if(corr(i) < corr(i+2)){
-  //             index(i) = index(i+1);
+  //           index(i) = index(i+1);
                corr(i) = corr(i+2);
             }
          }
          if(corr(0) < corr(4)){
-//            index(0) = index(4);
+//          index(0) = index(4);
             corr(0) = corr(4);
             
          }
          if(mp[offset] < corr(0)){
           // mpi[offset] = index(0);
             mp[offset] = corr(0);
-         }*/
+         }
       }
       for(int i = 0; i < unroll; i++){
          astore(cov(i),cx,diag+4*i);
