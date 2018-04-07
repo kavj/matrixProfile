@@ -28,20 +28,20 @@ static inline void cov_kern_simd(const dtype* __restrict__ ts, dtype* __restrict
    block<vtype> c;
    block<vtype> m;
    block<vtype> aux;
-   for(int j = 0; j < unroll; j++){
-      m(j) = aload(mu,simlen*j);
+   for(int i = 0; i < unroll; i++){
+      m(i) = aload(mu,offset+simlen*i);
    }
-   for(int j = 0; j < sublen; j++){
-      for(int k = 0; k < unroll; k++){
-         aux(k) = uload(ts,i+j+simlen*k) - m(k);
+   for(int i = offset; i < offset+sublen; i++){
+      for(int j = 0; j < unroll; j++){
+         aux(j) = uload(ts,i+simlen*j) - m(j);
       }
-      vtype q = brdcst(query,i);
-      for(int k = 0; k < unroll; k++){
-         c(k) = mul_add(q,aux(k),c(k));
+      vtype q = brdcst(query,i-offset);
+      for(int j = 0; j < unroll; j++){
+         c(j) = mul_add(q,aux(j),c(j));
       }
    }
-   for(int j = 0; j < unroll; j++){
-      astore(c(j),cov,i+simlen*j);
+   for(int i = 0; i < unroll; i++){
+      astore(c(i),cov,offset+simlen*i);
    }
 }
 
@@ -51,20 +51,20 @@ static inline void batchcov_kern_scalar(const dtype* __restrict__ ts, dtype* __r
    block<dtype> c;
    block<dtype> m;
    block<dtype> aux;
-   for(int j = 0; j < unroll; j++){
-      m(j) = mu[i+j];
+   for(int i = 0; i < unroll; i++){
+      m(i) = mu[offset+i];
    }
-   for(int j = 0; j < sublen; j++){
-      dtype q = query[j];
-      for(int k = 0; k < unroll; k++){
-         aux(k) = ts[i+j]-m(j);
+   for(int i = offset; i < offset+sublen; i++){
+      for(int j = 0; j < unroll; j++){
+         aux(j) = ts[i+j]-m(j);
       }
-      for(int k = 0; k < unroll; k++){
-         c(k) = fma(q,aux(k),c(k));
+      dtype q = query[i-offset];
+      for(int j = 0; j < unroll; j++){
+         c(j) = fma(q,aux(j),c(j));
       }
    } 
-   for(int j = 0; j < unroll; j++){
-      cov[i+j] = c(j);
+   for(int i = 0; i < unroll; i++){
+      cov[i+offset] = c(i);
    }
 }
 
@@ -85,23 +85,18 @@ void batchcov_scalar(const dtype* __restrict__ ts, dtype* __restrict__ cov, cons
 }
 
 
-//template<typename dtype, typename vtype>
-
-// It's easiest to just use one unroll width here. 
-// Just allow it to repeat some work in the name of latency hiding. If there are fewer subsequences than the unroll width, then simply call reference instead
 //template<typename dtype,typename vtype>
 void batchcov_simd(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int count, int sublen){
    const int simlen = sizeof(vtype)/sizeof(dtype);
    const int stride = simlen*unroll;
    const int simd_block_count = count/stride;
    const int last = count - simd_block_count*stride;   
-   // check whether it's too small here
    if(simd_block_count > 0){
       for(int i = offset; i < block_lim + offset; i+=stride){
-         cov_kern_simd(ts, cov, query, mu, i, unroll,sublen);
+         cov_kern_simd(ts,cov,query,mu,i,unroll,sublen);
       }
       if(block_lim+offset < last){
-         cov_kern_simd(ts, cov, query, mu, block_lim,6,sublen); 
+         cov_kern_simd(ts,cov,query,mu,block_lim,last-(block_lim+offset),sublen); 
       }
    }
    else{
