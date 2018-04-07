@@ -18,13 +18,66 @@ void batchcov_reference(const dtype* __restrict__ ts, dtype* cov, const dtype* _
    }
 }
 
+static inline void cov_kern_simd(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int unroll, int sublen){
+   block<vtype> c;
+   block<vtype> m;
+   block<vtype> aux;
+   for(int j = 0; j < unroll; j++){
+      m(j) = aload(mu,simlen*j);
+   }
+   for(int j = 0; j < sublen; j++){
+      for(int k = 0; k < unroll; k++){
+         aux(k) = uload(ts,i+j+simlen*k) - m(k);
+      }
+      vtype q = brdcst(query,i);
+      for(int k = 0; k < unroll; k++){
+         c(k) = mul_add(q,aux(k),c(k));
+      }
+   }
+   for(int j = 0; j < unroll; j++){
+      astore(c(j),cov,i+simlen*j);
+   }
+}
+
+static inline void batchcov_kern_scalar(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int sublen){
+   const int block_lim = offset + (count/unroll)*unroll;   
+   block<dtype> c;
+   block<dtype> m;
+   block<dtype> aux;
+   for(int j = 0; j < unroll; j++){
+      m(j) = mu[i+j];
+   }
+   for(int j = 0; j < sublen; j++){
+      dtype q = query[j];
+      for(int k = 0; k < unroll; k++){
+         aux(k) = ts[i+j]-m(j);
+      }
+      for(int k = 0; k < unroll; k++){
+         c(k) = fma(q,aux(k),c(k));
+      }
+   } 
+   for(int j = 0; j < unroll; j++){
+      cov[i+j] = c(j);
+   }
+}
+
 
 //template<typename dtype>
 // not sure I want to keep this, probably only want the AVX type, otherwise just use fft assuming stability doesn't suck
-
-/*void batchcov_scalar(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int count, int sublen){
+void batchcov_scalar(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int count, int sublen){
    const int unroll = 8;
    const int block_lim = offset + (count/unroll)*unroll;   
+   const int block_count = count/unroll;
+   if(block_count > 0){
+      for(int i = offset; i < block_lim + offset; i+= unroll){
+         batchcov_kern_scalar(ts,cov,query,mu,i,sublen);
+      }
+      batchcov_kern_scalar(ts,cov,query,mu,offset+count-unroll,sublen);
+   }
+   else{
+      batchcov_reference(ts,cov,query,mu,offset,count,sublen);
+   }
+
    for(int i = offset; i < block_lim; i+=unroll){
       block<dtype> c;
       block<dtype> m;
@@ -44,29 +97,6 @@ void batchcov_reference(const dtype* __restrict__ ts, dtype* cov, const dtype* _
       for(int j = 0; j < unroll; j++){
          cov[i+j] = c(j);
       }
-   }
-   batchcov_reference(ts,cov,query,mu,offset+block_lim,count-block_lim,sublen);
-}*/
-
-
-static inline void cov_kern_simd(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int unroll, int sublen){
-   block<vtype> c;
-   block<vtype> m;
-   block<vtype> aux;
-   for(int j = 0; j < unroll; j++){
-      m(j) = aload(mu,simlen*j);
-   }
-   for(int j = 0; j < sublen; j++){
-      for(int k = 0; k < unroll; k++){
-         aux(k) = uload(ts,i+j+simlen*k) - m(k);
-      }
-      vtype q = brdcst(query,i);
-      for(int k = 0; k < unroll; k++){
-         c(k) = mul_add(q,aux(k),c(k));
-      }
-   }
-   for(int j = 0; j < unroll; j++){
-      astore(c(j),cov,i+simlen*j);
    }
 }
 
@@ -95,4 +125,5 @@ void batchcov_simd(const dtype* __restrict__ ts, dtype* __restrict__ cov, const 
       batch_cov_reference(ts,cov,query,mu,offset,count,sublen);
    }
 }
+
 
