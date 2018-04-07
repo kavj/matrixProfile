@@ -68,11 +68,11 @@ static inline void solvetile(dt* __restrict__ cx, const dt* __restrict__ df, con
          }
          const double ones[4] = {0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF};
          __m256d onecheck = aload(ones,0);
-
+         __m256d ofs = brdcst(offset);
          for(int i = 0; i < unroll; i++){
             __m256d blah = cmpgtr(corr(i),brdcst(mp,offset+i*stride));
             if(_mm256_testz_pd(onecheck,blah)){
-               ustore(blend(uload(mpi,k+i),brdcst(offset),blah));
+               ustore(blend(uload(mpi,k+i),ofs,blah));
                ustore(blend(corr(i),brdcst(mp,offset+i*stride),blah),mp,offset+i*stride);
             }
          }
