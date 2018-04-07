@@ -6,6 +6,11 @@ typedef double dtype;
 typedef __m256d vtype;
 
 
+
+static inline void batchcov_kern_scalar(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int sublen) __attribute__ ((always_inline));
+static inline void cov_kern_simd(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int unroll, int sublen) __attribute__ ((always_inline));
+
+
 //template<typename dtype>
 void batchcov_reference(const dtype* __restrict__ ts, dtype* cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int count, int sublen){
    for(int i = 0; i < count; i++){
@@ -18,6 +23,7 @@ void batchcov_reference(const dtype* __restrict__ ts, dtype* cov, const dtype* _
    }
 }
 
+//template<typename dtype, typename vtype>
 static inline void cov_kern_simd(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int unroll, int sublen){
    block<vtype> c;
    block<vtype> m;
@@ -39,6 +45,7 @@ static inline void cov_kern_simd(const dtype* __restrict__ ts, dtype* __restrict
    }
 }
 
+//template<typename dtype>
 static inline void batchcov_kern_scalar(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int sublen){
    const int block_lim = offset + (count/unroll)*unroll;   
    block<dtype> c;
@@ -61,11 +68,9 @@ static inline void batchcov_kern_scalar(const dtype* __restrict__ ts, dtype* __r
    }
 }
 
-
-//template<typename dtype>
 // not sure I want to keep this, probably only want the AVX type, otherwise just use fft assuming stability doesn't suck
+//template<typename dtype>
 void batchcov_scalar(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int count, int sublen){
-   const int unroll = 8;
    const int block_lim = offset + (count/unroll)*unroll;   
    const int block_count = count/unroll;
    if(block_count > 0){
@@ -77,27 +82,6 @@ void batchcov_scalar(const dtype* __restrict__ ts, dtype* __restrict__ cov, cons
    else{
       batchcov_reference(ts,cov,query,mu,offset,count,sublen);
    }
-
-   for(int i = offset; i < block_lim; i+=unroll){
-      block<dtype> c;
-      block<dtype> m;
-      block<dtype> aux;
-      for(int j = 0; j < unroll; j++){
-         m(j) = mu[i+j];
-      }
-      for(int j = 0; j < sublen; j++){
-         dtype q = query[j];
-         for(int k = 0; k < unroll; k++){
-            aux(k) = ts[i+j]-m(j);
-         }
-         for(int k = 0; k < unroll; k++){
-            c(k) += q*aux(k);
-         }
-      } 
-      for(int j = 0; j < unroll; j++){
-         cov[i+j] = c(j);
-      }
-   }
 }
 
 
@@ -105,9 +89,8 @@ void batchcov_scalar(const dtype* __restrict__ ts, dtype* __restrict__ cov, cons
 
 // It's easiest to just use one unroll width here. 
 // Just allow it to repeat some work in the name of latency hiding. If there are fewer subsequences than the unroll width, then simply call reference instead
-
+//template<typename dtype,typename vtype>
 void batchcov_simd(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int count, int sublen){
-   const int unroll = 8;
    const int simlen = sizeof(vtype)/sizeof(dtype);
    const int stride = simlen*unroll;
    const int simd_block_count = count/stride;
