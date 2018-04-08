@@ -1,3 +1,4 @@
+#include <cmath>
 #include "../arch/avx256.h"
 #include "../utils/reg.h"
 
@@ -92,7 +93,7 @@ void batchcov_simd(const dtype* __restrict__ ts, dtype* __restrict__ cov, const 
    const int simd_block_count = count/stride;
    const int last = count - simd_block_count*stride;   
    if(simd_block_count > 0){
-      for(int i = offset; i < block_lim + offset; i+=stride){
+      for(int i = offset; i < block_lim + offset; i+=stride){  // <-- I got rid of block_lim, so this needs to be fixed
          cov_kern_simd(ts,cov,query,mu,i,unroll,sublen);
       }
       if(block_lim+offset < last){
