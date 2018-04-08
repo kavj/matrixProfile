@@ -7,7 +7,6 @@
 
 
 
-
 template<typename dtype>
 static inline void xadd(dtype &a, dtype &b){
    dtype c = a + b;
@@ -38,12 +37,12 @@ static inline void xsum(double *a, double &s, double &e, int len){
 }
 
 template<typename dtype>
-static inline dtype xsInv_scalar(dtype *a, dtype *mu, dtype *sI, int offset, int winlen){
+dtype invn(dtype *a, dtype *mu, dtype *sI, int offset, int winlen){
    dtype z = mu[offset];
    dtype p = a[offset] - z;
    dtype s = p;
    xmul(p,s);
-   for(int j = offset+1; j < offset+winlen; j++){
+   for(int j = offset + 1; j < offset+winlen; j++){
        dtype h = a[j] - z;
        dtype r = h;
        xmul(h,r);
@@ -55,7 +54,7 @@ static inline dtype xsInv_scalar(dtype *a, dtype *mu, dtype *sI, int offset, int
    return p;
 }
 
-
+/*
 template<typename dtype>
 void xsInv(dtype *a, dtype *mu, dtype *sI, int len, int winlen){
    int k = len - winlen + 1;
@@ -65,7 +64,7 @@ void xsInv(dtype *a, dtype *mu, dtype *sI, int len, int winlen){
    }
 }
 
-
+// move to cython layer 
 template<typename dtype>
 void init_dfdx(dtype *a, dtype* mu, dtype *df, dtype *dx, int w, int n){
    df[0] = 0; 
@@ -74,7 +73,7 @@ void init_dfdx(dtype *a, dtype* mu, dtype *df, dtype *dx, int w, int n){
       df[i+1] = (a[i+w] - mu[i+1]) + (a[i]-mu[i]);
       dx[i+1] = (a[i+w] - a[i])/2.0;
    }
-}
+}*/
 
 
 template<typename dtype>
