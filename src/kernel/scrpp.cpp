@@ -1,48 +1,105 @@
+#include<algorithm>
+#include<cstdint>
 #include "../utils/reg.h"
 
 // I will clean up the __Restrict__ and other nonsense later. They're mainly used by the compiler during auto-vectorization. 
 // There are a lot of different ways to set up this section in order to accommodate extremely long or short subsequence lengths and other things. 
 
-// These are very sparse calculations, so simd doesn't help much. It's more down to things like prefetching and grouping. By batching based on unroll factors, we get a chunk of queries into a contiguous chunk of memory. It might be ideal to do this whole function per thread with heavier unrolling
+// This interleaves several queries, which turns a sparse problem into a dense one. It allows us to iterate continuously over a memory buffer. 
+// It is important to note that we need to be careful about exclusion zones
+// Since the queries are in order we naturally hit them in order
+// I will probably have to account for that by using a temporary indexed list whenever this is encountered. I would just need to declare a maxunroll or something at compile time and check "if conflicts" 
+// This is easy enough to deal with when using simd registers. Just int64_t excluded_mask --> blend if a conflict is detected
+
+// typically unroll is anywhere from 8 to 12 multiplied by intended simd length. It can be modified to ensure it's reasonable with respect to cache. 
+// With very long subsequence lengths, it may not be obvious how to tune this. The longest example in the paper was 4096. This should be reasonable up to around 8192 with scalar extensions or 1024 with simd
+// It's a reasonable guess at least based on typical L1/L2 sizes used in x86 in recent years
+//
+//
+// It occurs to me that the primary candidates for parallelization would be the overall time series and batch normalization
+// We could therefore have a loop for batch norm
+// We would of course need some way to partition qcov among threads?
+// This probably requires a struct or something somewhere
 
 
-// This would probably be faster if I interleaved queries to allow for simd usage, since we could force aligned loads and broadcast terms of ts
-// The copy stage would be a little exotic, but that doesn't really matter. I should probably benchmark compare first?
+// This probably ultimately needs some shared data structure like struct ts_descript{ bufferlist .....}
+//
 
-// Actually these should be grouped into contiguous memory rather than strided. The main problem is that the strided case can produce cache conflicts with long subsequence lengths.
-// It's still possible to encounter that problem, but it's much less pronounced if they aren't used again for some time. 
-// My suspicion is that I should eventually compare this to a recursive strategy, given that O(m^~1.36) is achievable for m outputs of sublen m.
-// This function shouldn't use simd. It should just do a manual gather here.
-void batch_normalize(const double* __Restrict__ ts, const double* __Restrict__ q, const double* __Restrict__ mu, const double* __Restrict__ invnm, int qstart, int qcount, int sublen, int step){
+// It could also make sense to use an MKL back end? This way we could just set up xcorr directly
+
+void batch_normalize(const double* __Restrict__ ts, const double* __Restrict__ q, const double* __Restrict__ mu, int qstart, int qcount, int sublen, int step){
    int back = len-sublen+1;
    block<double> reg;
-   // hoist the stat variables
+   // hoist means 
    for(int i = 0; i < qcount; i++){
-      reg(i) = mu[qstart+i*step];
+      reg(i) = mu[i*step+qstart];
    } 
-   for(int i = 0; i < qcount; i++){
-      reg(i+qcount) = invnm[qstart+i*step];
-   }
    for(int i = 0; i < sublen; i++){
       for(int j = 0; j < qcount; j++){
-         int k = i+j*step;
-         q[k] = ts[qstart+k]-reg(j);
-      }
-      for(int j = 0; j < qcount; j++){
-         int k = i+j*step;
-         q[k] *= reg(j+qcount);
+         q[i*qcount+j] = ts[i+qstart+j*step]-reg(j);
       }
    }
 }
 
 
-// self similarity or partial auto correlation can be performed using a smaller number of arrays using the skew symmetric formula for df,dg
-// For now let's assume centering one is good enough. This will reduce register pressure somewhat since xmm and ymm only have 16 names
-//
-void prescr_partial_xcorr(double* __Restrict__ qmcov, double* __Restrict__ const double* __Restrict__ queries, ,const double* __Restrict__ ts, const double* __Restrict__ invn, int len, int sublen, int step){
-   
+
+static inline void partial_xcorr_kern(double* __Restrict__ qmcov, double* __Restrict__ qcorr, double* __Restrict__ qbuf, int64_t* __Restrict__ qind, const double* __Restrict__ ts, const double* __Restrict__ mu, const double* __Restrict__ invn, int qstart, int unroll, int sublen, int qstart, int step, int excl){
+   block<double> cov;
+   for(int i = 0; i < len; i++){
+      double m = mu[i];
+      for(int j = 0; j < sublen; j++){
+         double c = ts[i] - m;
+         for(int k = 0; k < unroll; k++){
+            cov(k) += qbuff[j*unroll+k]*c;
+         } 
+      }
+      int excl_start = std::max(0,i-excl);
+      int excl_fin = std::min(len-sublen+1,i+excl);
+      if((qstart >= excl_fin) || (qstart+unroll*step < excl_start)){
+         for(int k = 0; k < unroll; k++){
+            cov(unroll+k) = cov(k)*invn[qstart+k*step];
+         }
+         for(int k = unroll; k < 2*unroll; k++){
+            cov(k) *= invn[i];
+         }
+         for(int k = unroll; k < 2*unroll; k++){
+            if(cov(k) > qcorr[qstart+k*step]){
+               int qi = qstart+k*step; // <-- I'll have to pass an offset pointer somewhere?
+               qcorr[qi] = cov(k);
+               qcov[qi] = cov(k-unroll);
+               qind[qi] = i;
+            }
+         }
+      }
+      else{
+         for(int k = unroll; k < 2*unroll; k++){
+            int qi = qstart + k*step;
+            if(qi < excl_start || qi >= excl_fin){
+               qcorr[qi] = cov(k);
+               qcov[qi] = cov(k-unroll);
+               qind[qi] = i;
+            }
+         }
+      }
+   }
+}
 
 
+
+// This should probably be the nomkl backend. I should check on current licensing terms for mkl
+
+// This takes a query range and preallocated buffers
+// qcorr could technically be replaced with temporary variables. It's just rescaled from qcov
+// In general we only care about the maxima here, which helps cut down on excess bus traffic
+void prescr_partial_xcorr(double* __Restrict__ qmcov, double* __Restrict__ qcorr, double* __Restrict__ qbuf, int64_t* __Restrict__ qind, const double* __Restrict__ ts, const double* __Restrict__ mu, const double* __Restrict__ invn, int qstart, int qcount, int len, int sublen, int step, int excl){
+   int rem = qcount;
+   while(rem > 0){
+      int unroll = std::min(8,rem);
+      int start = qstart+(qcount-rem)*step;
+      batch_normalize(ts,qbuf,mu,start,unroll,sublen,step);
+      partial_xcorr_kern(qmcov,qcorr,qbuf,qind,ts,mu,invn,start,step,excl); 
+      rem -= unroll;
+   }
 }
 
 
