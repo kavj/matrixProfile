@@ -5,29 +5,9 @@
 // I will clean up the __Restrict__ and other nonsense later. They're mainly used by the compiler during auto-vectorization. 
 // There are a lot of different ways to set up this section in order to accommodate extremely long or short subsequence lengths and other things. 
 
-// This interleaves several queries, which turns a sparse problem into a dense one. It allows us to iterate continuously over a memory buffer. 
-// It is important to note that we need to be careful about exclusion zones
-// Since the queries are in order we naturally hit them in order
-// I will probably have to account for that by using a temporary indexed list whenever this is encountered. I would just need to declare a maxunroll or something at compile time and check "if conflicts" 
-// This is easy enough to deal with when using simd registers. Just int64_t excluded_mask --> blend if a conflict is detected
-
-// typically unroll is anywhere from 8 to 12 multiplied by intended simd length. It can be modified to ensure it's reasonable with respect to cache. 
-// With very long subsequence lengths, it may not be obvious how to tune this. The longest example in the paper was 4096. This should be reasonable up to around 8192 with scalar extensions or 1024 with simd
-// It's a reasonable guess at least based on typical L1/L2 sizes used in x86 in recent years
-//
-//
-// It occurs to me that the primary candidates for parallelization would be the overall time series and batch normalization
-// We could therefore have a loop for batch norm
-// We would of course need some way to partition qcov among threads?
-// This probably requires a struct or something somewhere
-
-
-// This probably ultimately needs some shared data structure like struct ts_descript{ bufferlist .....}
-//
-
-// It could also make sense to use an MKL back end? This way we could just set up xcorr directly
-
-// We center about the mean and interleave
+// Queries are interleaved by some unrolling factor. This way we can stride continuously through memory when computing initial covariance with unrolling
+// We would naturally use the upper triangular optimization so that it's easier to set exclusion zones. This means that for row 1, we would start with 1+excl given the symmetry of the whole thing
+// otherwise it gets really nasty
 
 void batch_normalize(double* __Restrict__ qbuf,  const double* __Restrict__ ts, const double* __Restrict__ mu, int qstart, int qcount, int sublen, int step){
    int back = len-sublen+1;
@@ -44,11 +24,6 @@ void batch_normalize(double* __Restrict__ qbuf,  const double* __Restrict__ ts, 
 }
 
 
-// it would be easier to track things entering or leaving the exclusion zone since queries are ordered
-// Then it becomes prefix ...  partial overlap ... suffix
-//
-// In general these things are spaced such that we shouldn't have a lot of things in there simultaneously
-// In fact I should just fall back to a reference if it's too narrow
 
 // it would be best to do this using an upper triangular pattern. It avoids a lot of nonsense
 
@@ -56,7 +31,7 @@ static inline void partial_xcorr_kern(double* __Restrict__ qmcov, double* __Rest
    block<double> cov;
    for(int i = 0; i < len; i++){ // <-- needs an arbitrary start point
       double m = mu[i];
-      for(int j = 0; j < sublen; j++){  // beter to avoid checks in tight inner loops, particularly if we use simd later
+      for(int j = 0; j < sublen; j++){  
          double c = ts[i] - m;
          for(int k = 0; k < unroll; k++){
             cov(k) += qbuf[j*unroll+k]*c;
@@ -108,6 +83,32 @@ void prescr_partial_xcorr(double* __Restrict__ qmcov, double* __Restrict__ qcorr
       }
       rem -= unroll;
    }
+}
+
+// this may need prefetching due to weird memory access
+void max_reduc(double* __Restrict__ qcov, double* __Restrict__ qcorr, int* __Restrict__ qind, double* __Restrict__ corr, int* __Restrict__ ind, int qstart, int count, int stride,int passes){
+   for(int i = qstart; i < qstart+count; i++){
+      double qcr = qcorr[i];
+      double qi  = qind[i];
+      for(int j = 0; j < passes; j++){
+         if(qcorr[i+j*stride] > qcr){
+            qcr = qcorr[i+j*stride];
+            qi = qind[i+j*stride];
+         }
+      }
+   }
+}
+
+
+void pxc_extrap_unifstride(double* __Restrict__ qmcov, double* __Restrict__ qcorr, double* __Restrict__ qbuf, int64_t* __Restrict__ qind, const double* __Restrict__ ts, const double* __Restrict__ mu, const double* __Restrict__ df, const double* __Restrict__ dg, const double* __Restrict__ invn, int qstart, int qcount, int step, int mxlen){
+   for(int i = qstart; i < qcount; i++){
+      //int jmx = std::min(mxlen,i+step);
+      int jinit = qind[i];
+      double c = 
+      for(int j = jinit; j < jinit+step; j++){
+         
+      }
+   } 
 }
 
 
