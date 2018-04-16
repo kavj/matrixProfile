@@ -42,51 +42,46 @@ void batch_normalize(const double* __Restrict__ ts, const double* __Restrict__ q
 }
 
 
+// it would be easier to track things entering or leaving the exclusion zone since queries are ordered
+// Then it becomes prefix ...  partial overlap ... suffix
+//
+// In general these things are spaced such that we shouldn't have a lot of things in there simultaneously
+// In fact I should just fall back to a reference if it's too narrow
+
+
 
 static inline void partial_xcorr_kern(double* __Restrict__ qmcov, double* __Restrict__ qcorr, double* __Restrict__ qbuf, int64_t* __Restrict__ qind, const double* __Restrict__ ts, const double* __Restrict__ mu, const double* __Restrict__ invn, int qstart, int unroll, int sublen, int qstart, int step, int excl){
    block<double> cov;
    for(int i = 0; i < len; i++){
       double m = mu[i];
-      for(int j = 0; j < sublen; j++){
+      for(int j = 0; j < sublen; j++){  // beter to avoid checks in tight inner loops, particularly if we use simd later
          double c = ts[i] - m;
          for(int k = 0; k < unroll; k++){
             cov(k) += qbuff[j*unroll+k]*c;
          } 
       }
-      int excl_start = std::max(0,i-excl);
-      int excl_fin = std::min(len-sublen+1,i+excl);
-      if((qstart >= excl_fin) || (qstart+unroll*step < excl_start)){
-         for(int k = 0; k < unroll; k++){
-            cov(unroll+k) = cov(k)*invn[qstart+k*step];
-         }
-         for(int k = unroll; k < 2*unroll; k++){
-            cov(k) *= invn[i];
-         }
-         for(int k = unroll; k < 2*unroll; k++){
-            if(cov(k) > qcorr[qstart+k*step]){
-               int qi = qstart+k*step; // <-- I'll have to pass an offset pointer somewhere?
-               qcorr[qi] = cov(k);
-               qcov[qi] = cov(k-unroll);
-               qind[qi] = i;
-            }
-         }
+      // figure out which queries overlap the exclusion zone
+      int pref_end = max(0,(std::max(0,i-excl) - qstart)/step);
+      int suff_begin = max(0,(std::min(len-sublen+1,i+excl) - qstart)/step);
+      for(int k = 0; k < pref_end; k++){
+         int qi = qstart+k*step; // <-- I'll have to pass an offset pointer somewhere?
+         qcorr[qi] = cov(k);
+         qcov[qi] = cov(k-unroll);
+         qind[qi] = i;
+
       }
-      else{
-         for(int k = unroll; k < 2*unroll; k++){
-            int qi = qstart + k*step;
-            if(qi < excl_start || qi >= excl_fin){
-               qcorr[qi] = cov(k);
-               qcov[qi] = cov(k-unroll);
-               qind[qi] = i;
-            }
-         }
+      for(int k = suff_begin; k < unroll; k++){
+         int qi = qstart+k*step; 
+         qcorr[qi] = cov(k);
+         qcov[qi] = cov(k-unroll);
+         qind[qi] = i;
+
       }
    }
 }
 
 
 
-// This should probably be the nomkl backend. I should check on current licensing terms for mkl
 
 // This takes a query range and preallocated buffers
 // qcorr could technically be replaced with temporary variables. It's just rescaled from qcov
