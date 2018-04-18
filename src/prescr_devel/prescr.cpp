@@ -11,19 +11,6 @@
 // We would naturally use the upper triangular optimization so that it's easier to set exclusion zones. This means that for row 1, we would start with 1+excl given the symmetry of the whole thing
 // otherwise it gets really nasty
 
-/*
-void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, int qstart, int unroll, int sublen, int step){
-   // hoist means 
-   #pragma omp parallel for
-   for(int i = 0; i < unroll; i++){
-      double m = mu[i*step+qstart];
-      for(int j = 0; j < sublen; j++){
-         qbuf[i*step+j] = ts[i*step+j+qstart] - m;
-      }
-   }
-}
-*/
-
 // doing this in a more naive manner confused gcc in that it was seemingly worried whether things might overlap
 void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, int qstart, int count, int sublen, int step){
    //block<double> qm;
@@ -40,6 +27,86 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
          ++tsind;
       }
    }
+}
+
+
+
+// This is a slightly exotic reduction using hoisted blocks of 8. I suspect it may be hard to beat even with vectorization due to the reduced throughput of blend operations and much higher register pressure
+// This kind of thing often confuses gcc's scheduler
+
+void max_reduction_8x1(double* __restrict__ cov, double* __restrict__ invn, int* __restrict__ blah, double qcorr, double qinvn, int qind, int offset, int count){
+   //const int def_count = 8; // <-- temp val
+   #define unroll 8;
+   int qind_init = qind; // save for update
+   for(int i = offset; i < offset+count; i+= unroll){
+      block<double> corr;
+      for(int j = 0; j < unroll; j++){
+         corr(j) = cov[i+j]*qinvn;
+      }
+      for(int j = 0; j < unroll; j++){
+         corr(j) *= invn[i+j];
+      }
+      block<int> cind;
+      for(int j = 0; j < 4; j++){
+         if(corr(2*j) < corr(2*j+1)){
+            corr(2*j) = corr(2*j+1);
+            cind(j) = 2*j+1;
+         }
+         else{
+            cind(j) = 2*j;
+         }
+      }
+      for(int j = 0; j < 2; j++){
+         if(corr(4*j) < corr(4*j+2)){
+            corr(4*j) = corr(4*j+2);
+            cind(4*j) = cind(4*j+2);
+         }
+      }
+      if(corr(0) < corr(4)){
+         if(qcorr < corr(4)){
+            qcorr = corr(4);
+            qind = cind(4);
+         }
+      }
+      else if(qcorr < corr(0)){
+         qcorr = corr(0);
+         qind = cind(0);
+      }
+   }
+   *cov = qcorr;
+   *blah = qind; // <-- temporaries this should probably return a struct
+}
+
+//void max_reduction(double* __restrict__
+// if count > 8 call 8x1 version  possibly inlined without restrict keywords then include logic for the reference here?
+// should use peeling here
+
+void max_reduction(double* __restrict__ cov, double* __restrict__ invn, int* __restrict__ blah, double qcorr, double qinvn, int qind, int offset, int count){
+   int aligned = count - count%8;
+   block<double> corr;
+   for(int i = aligned; i < count; i++){
+      corr(i-aligned) = cov[i]*qinvn;
+   }
+   for(int i = aligned; i < count; i++){
+      corr(i-aligned) *= invn[i]; 
+   }
+   for(int i = aligned; i < count; i++){
+      if(qcorr < corr(i-aligned)){
+         qcorr = corr(i-aligned);
+         qind = i;
+      }
+   }
+}
+
+void pxc_extrap_unifstride(double* __restrict__ qmcov, double* __restrict__ qcorr, double* __restrict__ qbuf, int64_t* __restrict__ qind, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ df, const double* __restrict__ dg, const double* __restrict__ invn, int qstart, int qcount, int step, int mxlen){
+   for(int i = qstart; i < qcount; i++){
+      //int jmx = std::min(mxlen,i+step);
+      int jinit = qind[i];
+      //double c = 
+      for(int j = jinit; j < jinit+step; j++){
+         
+      }
+   } 
 }
 
 /*
@@ -82,6 +149,7 @@ static inline void partial_xcorr_kern(double* __restrict__ qmcov, double* __rest
    }
 }*/
 
+
 /*
 // This takes a query range and preallocated buffers
 // qcorr could technically be replaced with temporary variables. It's just rescaled from qcov
@@ -104,75 +172,17 @@ void prescr_partial_xcorr(double* __restrict__ qmcov, double* __restrict__ qcorr
    }
 }*/
 
-
-// This is a slightly exotic reduction using hoisted blocks of 8. I suspect it may be hard to beat even with vectorization due to the reduced throughput of blend operations and much higher register pressure
-// This kind of thing often confuses gcc's scheduler
-
-void max_reduction_8x1(double* __restrict__ cov, double* __restrict__ invn, int* __restrict__ blah, double qcorr, double qinvn, int qind, int offset, int count){
-   //const int def_count = 8; // <-- temp val
-   #define unroll 8
-   for(int i = offset; i < offset+count; i+= unroll){
-      block<double> corr;
-      /*for(int j = 0; j < unroll; j++){
-         corr(j) = cov[i+j]*qinvn;
-      }*/
-      for(int j = 0; j < unroll; j++){
-         corr(j) *= invn[i+j];
-      }
-      block<int> cind;
-      for(int j = 0; j < 4; j++){
-         if(corr(2*j) < corr(2*j+1)){
-            corr(2*j) = corr(2*j+1);
-            cind(j) = 2*j+1;
-         }
-         else{
-            cind(j) = 2*j;
-         }
-      }
-      for(int j = 0; j < 2; j++){
-         if(corr(4*j) < corr(4*j+2)){
-            corr(4*j) = corr(4*j+2);
-            cind(4*j) = cind(4*j+2);
-         }
-      }
-      if(corr(0) < corr(4)){
-         if(qcorr < corr(4)){
-            qcorr = corr(4);
-            qind = cind(4);
-         }
-      }
-      else if(qcorr < corr(0)){
-         qcorr = corr(0);
-         qind = cind(0);
+/*
+void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, int qstart, int unroll, int sublen, int step){
+   // hoist means 
+   #pragma omp parallel for
+   for(int i = 0; i < unroll; i++){
+      double m = mu[i*step+qstart];
+      for(int j = 0; j < sublen; j++){
+         qbuf[i*step+j] = ts[i*step+j+qstart] - m;
       }
    }
-   
-   *cov = qcorr;
-   *blah = qind; // <-- temporaries
 }
-
-//void max_reduction(double* __restrict__
-// if count > 8 call 8x1 version  possibly inlined without restrict keywords then include logic for the reference here?
-// should use peeling here
-
-void max_reduction(double* __restrict__ cov, double* __restrict__ invn, int* __restrict__ blah, double qcorr, double qinvn, int qind, int offset, int count){
-   block<double> corr;
-   //int unaligned = 
-   for(int i = offset; i < offset+count; i++){
-      
-   }
-
-}
-
-void pxc_extrap_unifstride(double* __restrict__ qmcov, double* __restrict__ qcorr, double* __restrict__ qbuf, int64_t* __restrict__ qind, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ df, const double* __restrict__ dg, const double* __restrict__ invn, int qstart, int qcount, int step, int mxlen){
-   for(int i = qstart; i < qcount; i++){
-      //int jmx = std::min(mxlen,i+step);
-      int jinit = qind[i];
-      //double c = 
-      for(int j = jinit; j < jinit+step; j++){
-         
-      }
-   } 
-}
+*/
 
 
