@@ -13,8 +13,6 @@
 
 // doing this in a more naive manner confused gcc in that it was seemingly worried whether things might overlap
 void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, int qstart, int count, int sublen, int step){
-   //block<double> qm;
-   // hoist means 
    #pragma omp simd  // <-- check whether syntax is valid stacked, possibly inline this without restrict quantifieers
    #pragma omp parallel for
    for(int i = 0; i < count; i++){
@@ -29,16 +27,11 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
    }
 }
 
-
-
-// This is a slightly exotic reduction using hoisted blocks of 8. I suspect it may be hard to beat even with vectorization due to the reduced throughput of blend operations and much higher register pressure
-// This kind of thing often confuses gcc's scheduler
-
-void max_reduction_8x1(double* __restrict__ cov, double* __restrict__ invn, int* __restrict__ blah, double qcorr, double qinvn, int qind, int offset, int count){
-   //const int def_count = 8; // <-- temp val
-   #define unroll 8;
-   int qind_init = qind; // save for update
-   for(int i = offset; i < offset+count; i+= unroll){
+// prescrimp uses cross correlation, so it's only possible to fuse normalization and comparison
+void max_normalize_reduction(double* __restrict__ cov, double* __restrict__ invn, int* __restrict__ blah, double qcorr, double qinvn, int qind, int offset, int count){
+   #define unroll 8
+   int aligned = count - count%unroll + offset;
+   for(int i = offset; i < aligned; i+= unroll){
       block<double> corr;
       for(int j = 0; j < unroll; j++){
          corr(j) = cov[i+j]*qinvn;
@@ -74,30 +67,20 @@ void max_reduction_8x1(double* __restrict__ cov, double* __restrict__ invn, int*
       }
    }
    *cov = qcorr;
-   *blah = qind; // <-- temporaries this should probably return a struct
+   *blah = qind; 
+   for(int i = aligned; i < offset+count; i++){
+      double corr = cov[i]*qinvn*invn[i];
+      if(qcorr < corr){
+         qcorr = corr;
+         qind =  i;
+      } 
+   }
+   *blah = qind;  // <-- temporary so these aren't optimized out
+   *cov = qcorr;
 }
 
-//void max_reduction(double* __restrict__
-// if count > 8 call 8x1 version  possibly inlined without restrict keywords then include logic for the reference here?
-// should use peeling here
 
-void max_reduction(double* __restrict__ cov, double* __restrict__ invn, int* __restrict__ blah, double qcorr, double qinvn, int qind, int offset, int count){
-   int aligned = count - count%8;
-   block<double> corr;
-   for(int i = aligned; i < count; i++){
-      corr(i-aligned) = cov[i]*qinvn;
-   }
-   for(int i = aligned; i < count; i++){
-      corr(i-aligned) *= invn[i]; 
-   }
-   for(int i = aligned; i < count; i++){
-      if(qcorr < corr(i-aligned)){
-         qcorr = corr(i-aligned);
-         qind = i;
-      }
-   }
-}
-
+/*
 void pxc_extrap_unifstride(double* __restrict__ qmcov, double* __restrict__ qcorr, double* __restrict__ qbuf, int64_t* __restrict__ qind, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ df, const double* __restrict__ dg, const double* __restrict__ invn, int qstart, int qcount, int step, int mxlen){
    for(int i = qstart; i < qcount; i++){
       //int jmx = std::min(mxlen,i+step);
@@ -108,81 +91,7 @@ void pxc_extrap_unifstride(double* __restrict__ qmcov, double* __restrict__ qcor
       }
    } 
 }
-
-/*
-// it would be best to do this using an upper triangular pattern. It avoids a lot of nonsense
-static inline void partial_xcorr_kern(double* __restrict__ qmcov, double* __restrict__ corr, double* __restrict__ qbuf, int64_t* __restrict__ ind, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int start, int unroll, int sublen, int step, int excl){
-   block<double> cov;
-   int span = 0; // dummy var while I figure out what I want to do post changes
-   for(int i = start; i < span; i++){ // <-- needs an arbitrary start point
-      double m = mu[i];
-      for(int j = 0; j < sublen; j++){  
-         double c = ts[i] - m;
-         for(int k = 0; k < unroll; k++){
-            cov(k) += qbuf[j*unroll+k]*c;
-         } 
-      }
-      m = invn[i];
-      for(int j = 0; j < unroll; j++){
-         cov(j+unroll) = cov(j)*m;
-      }
-      for(int j = 0; j < unroll; j++){
-         cov(j+unroll) *= invn[start+j*step];
-      }
-      double qopt = -1.0;
-      int qopt_i = -1;
-      for(int k = 0; k < unroll; k++){
-         int qi = start+k*step;
-         if(cov(k+unroll) > corr[qi]){
-            corr[qi] = cov(k+unroll);
-            qmcov[qi]= cov(k);
-         }
-         if(qopt < cov(k+unroll)){ // <-- hello stall cycles
-            qopt = cov(k+unroll);
-            qopt_i = qi;
-         }
-      }
-      if(qopt > corr[i]){
-         corr[i] = qopt;
-         ind[i] = qopt_i;
-      }
-   }
-}*/
-
-
-/*
-// This takes a query range and preallocated buffers
-// qcorr could technically be replaced with temporary variables. It's just rescaled from qcov
-// In general we only care about the maxima here, which helps cut down on excess bus traffic
-void prescr_partial_xcorr(double* __restrict__ qmcov, double* __restrict__ qcorr, double* __restrict__ qbuf, int64_t* __restrict__ qind, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int qstart, int qcount, int len, int sublen, int step, int excl){
-   int rem = qcount;
-   int maxqs = 8; // <-- Should be tuned using subsequence length and either detected cache size or dummy estimate
-
-   while(rem > 0){
-      int unroll = std::min(8,rem); // <-- this needs 2 steps of unrolling if we can reasonably stack enough queries to justify parallelizing this part
-      int start = qstart+(qcount-rem)*step;
-      for(int i = 0; i < unroll; i++){
-         batch_normalize(qbuf,ts,mu,start+i*unroll,unroll,sublen,step);  
-      }
-      #pragma omp parallel for
-      for(int i = 0; i < unroll; i++){  // <-- dummy setup
-         partial_xcorr_kern(qmcov,qcorr,qbuf,qind,ts,mu,invn,start,unroll,sublen,step,excl); 
-      }
-      rem -= unroll;
-   }
-}*/
-
-/*
-void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, int qstart, int unroll, int sublen, int step){
-   // hoist means 
-   #pragma omp parallel for
-   for(int i = 0; i < unroll; i++){
-      double m = mu[i*step+qstart];
-      for(int j = 0; j < sublen; j++){
-         qbuf[i*step+j] = ts[i*step+j+qstart] - m;
-      }
-   }
-}
 */
+
 
 
