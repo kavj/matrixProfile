@@ -5,9 +5,8 @@
 
 
 // This could probably use some cleanup
-
+// centered unit normalization
 void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int qstart, int count, int sublen, int step){
-   #pragma omp simd  // <-- check whether syntax is valid stacked, possibly inline this without restrict quantifieers
    #pragma omp parallel for
    for(int i = 0; i < count; i++){
       int qind = i*sublen;
@@ -22,7 +21,8 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
    }
 }
 
-void batch_cov(double* __restrict__ cbuf, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, const int* __restrict__ qind, int qstart, int count, int sublen, int step){
+// Should I actually use this? It may be acceptible to just adjust scale?
+void batch_partial_autocov(double* __restrict__ cbuf, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, const int* __restrict__ qind, int qstart, int count, int sublen, int step){
    #pragma omp parallel for
    for(int i = 0; i < count; i++){
       int qi = (qstart+i)*step;  
@@ -31,7 +31,7 @@ void batch_cov(double* __restrict__ cbuf, const double* __restrict__ ts, const d
       double qm = mu[qi];
       double cv = 0;
       for(int j = 0; j < sublen; j++){
-         cv += (ts[ci] - cm)*(qs[qi] - qm);
+         cv += (ts[ci] - cm)*(ts[qi] - qm);
          ++qi;
          ++ci;
       }
@@ -43,9 +43,11 @@ void batch_cov(double* __restrict__ cbuf, const double* __restrict__ ts, const d
 // prescrimp uses cross correlation, so it's only possible to fuse normalization and comparison
 // we have a partially normalized cross correlation. We hoist chunks of 8 loads  then use a tiny decision tree for the intermediate reduction
 // I like it because it's geeky
-void max_corr_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, int* __restrict__ cindex, double* __restrict__ invn, double qcorr, int qind, int qbase, int offset, int count){
+void max_partial_autocorr_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, int offset, int count, int qbase){
    const int unroll = 8;
    int aligned = count - count%unroll + offset;
+   double qcorr = -1.0;
+   int qind;
    for(int i = offset; i < aligned; i+= unroll){
       block<double> corr;
       for(int j = 0; j < unroll; j++){
@@ -88,7 +90,7 @@ void max_corr_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, i
       double corr = cov[i]*invn[i];
       if(qcorr < corr){
          qcorr = corr;
-         qind =  std::max(0,i-sublen);  //<-- this way it's only forward iteration. Doing both consecutively may partially invalidate  hardware prefetching
+         qind =  i;  //<-- this way it's only forward iteration. Doing both consecutively may partially invalidate  hardware prefetching
       } 
       if(xcorr[i] < corr){
          xcorr[i] = corr;
@@ -100,31 +102,59 @@ void max_corr_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, i
 }
 
 
-// generally easiest to just figure the necessary starting index, then iterate forward only
-// put in limits
-void maxpearson_extrap(const double* __restrict__ qcov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ invn, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen){
+// The time complexity of this is linear or close to linear, so we can get it working and ignore
+// I changed it to a zigzag pattern. 
+//
+void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ invn, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen, int len){
    for(int i = 0; i < count; i++){
-      int cind = qind[i]; 
-      int qind = i*stride;
+      c = qcov[i];
+      int qi = qind[i];
+      int ci = i*stride;
+      int lim = std::min(ci,qi);
+      lim = std::min(extraplen,lim);
       double c = qcov[i];
-      for(int j = 0; j < extraplen; j++){
-         c += dx[cind]*df[qind];
-         c += dx[qind]*df[cind];
-         double scale = (invn[qind]*invn[cind]);
+      for(int j = 0; j < lim; j++){
+         c -= dx[ci-j]*df[qi-j];
+         c -= dx[qi-j]*df[ci-j];
+         double scale = invn[qi]*invn[ci];
          double corr = c*scale;
-         if(mp[cind] < corr){
-            mp[qind] = corr;
-            mpi[qind] = cind;
+         if(mp[ci] < corr){
+            mp[ci] = corr;
+            mpi[ci] = qi;
          }
-         if(mp[qind] < corr){
-            mp[cind] = corr;
-            mpi[cind] = qind;
+         if(mp[qi] < corr){
+            mp[qi] = corr;
+            mpi[qi] = ci;
          }
-         ++cind; 
-         ++qindd;
+         --ci;
+         --qi;
       }
+      int lim = std::max(ci,qi);
+      lim = std::min(extraplen,len-lim);
+      for(int j = 0; j < lim; j++){
+         c += dx[ci]*df[qi];
+         c += dx[qi]*df[ci];
+         double scale = invn[qi]*invn[ci];
+         double corr = c*scale;
+         if(mp[ci] < corr){
+            mp[ci] = corr;
+            mpi[ci] = qi;
+         }
+         if(mp[qi] < corr){
+            mp[qi] = corr;
+            mpi[qi] = ci;
+         }
+         ++ci; 
+         ++qi;
+      }
+      
    }
 }
+
+
+// Maybe skip the partitioning. We have strong cache reuse over the query section via df, dg
+//
+
 
 // experimental section
 /*typedef __m256d vtype;
@@ -149,7 +179,7 @@ void avx_max_corr_reduction(double* __restrict__ cov,  double* __restrict__ xcor
          aux(j) = blend(
       }
    }
-}*/
+}
 
 // q is typically pre-normalized, but here we need centered only
 double autocov_single(const double* __restrict__ ts, double tmu, double qmu, int offset, int qoffset, int sublen){
@@ -160,4 +190,4 @@ double autocov_single(const double* __restrict__ ts, double tmu, double qmu, int
    return q;
 }
 
-
+*/
