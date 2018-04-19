@@ -6,6 +6,9 @@
 
 // This could probably use some cleanup
 // centered unit normalization
+// this is probably an acceptable way to do it, 
+// I was debating whether I should loop over singles in a parallel region
+// Perhaps should consult elsewhere?
 void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int qstart, int count, int sublen, int step){
    #pragma omp parallel for
    for(int i = 0; i < count; i++){
@@ -21,28 +24,10 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
    }
 }
 
-// Should I actually use this? It may be acceptible to just adjust scale?
-void batch_partial_autocov(double* __restrict__ cbuf, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, const int* __restrict__ qind, int qstart, int count, int sublen, int step){
-   #pragma omp parallel for
-   for(int i = 0; i < count; i++){
-      int qi = (qstart+i)*step;  
-      int ci = qind[qi];
-      double cm = mu[ci];
-      double qm = mu[qi];
-      double cv = 0;
-      for(int j = 0; j < sublen; j++){
-         cv += (ts[ci] - cm)*(ts[qi] - qm);
-         ++qi;
-         ++ci;
-      }
-      cbuf[i] = cv;
-   }
-}
 
 
-// prescrimp uses cross correlation, so it's only possible to fuse normalization and comparison
-// we have a partially normalized cross correlation. We hoist chunks of 8 loads  then use a tiny decision tree for the intermediate reduction
-// I like it because it's geeky
+// This is probably the best I can do without avx
+
 void max_partial_autocorr_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, int offset, int count, int qbase){
    const int unroll = 8;
    int aligned = count - count%unroll + offset;
@@ -102,6 +87,7 @@ void max_partial_autocorr_reduction(double* __restrict__ cov,  double* __restric
 }
 
 
+
 // The time complexity of this is linear or close to linear, so we can get it working and ignore
 // I changed it to a zigzag pattern. 
 //
@@ -151,6 +137,27 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
    }
 }
 
+
+
+
+/*
+// We shall see may not use this
+void batch_partial_autocov(double* __restrict__ cbuf, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, const int* __restrict__ qind, int qstart, int count, int sublen, int step){
+   #pragma omp parallel for
+   for(int i = 0; i < count; i++){
+      int qi = (qstart+i)*step;  
+      int ci = qind[qi];
+      double cm = mu[ci];
+      double qm = mu[qi];
+      double cv = 0;
+      for(int j = 0; j < sublen; j++){
+         cv += (ts[ci] - cm)*(ts[qi] - qm);
+         ++qi;
+         ++ci;
+      }
+      cbuf[i] = cv;
+   }
+}*/
 
 // Maybe skip the partitioning. We have strong cache reuse over the query section via df, dg
 //
