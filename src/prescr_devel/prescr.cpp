@@ -3,7 +3,6 @@
 #include "../utils/reg.h"
 
 
-
 // This could probably use some cleanup
 // centered unit normalization
 // this is probably an acceptable way to do it, 
@@ -11,12 +10,56 @@
 // Perhaps should consult elsewhere?
 
 
-// should be inlined
-/*void normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, double mu, double invn, int qstart, int sublen){
-   for(int j = 0; j < sublen; j++){
-      qbuf[j] = (ts[j]-qm)*qinvn;
+// somehow I'm not familiar with convention here on default initialization.
+
+
+struct query_desc{
+
+   double* qbuf;
+   double* qcov;
+   double* qcorr;
+   double* qmu;
+   double* qinvn;
+   int*qind;
+   int qbufcount;
+   int qstride;
+   int qmemstride;
+   int qcount; 
+   int querylen;
+}
+
+struct corr_desc{
+   double* corrbuf;
+   int section_len;
+   int memstride;
+   int bufcount;
+}
+
+
+struct prescr_desc{
+   prescr_desc() : ts(nullptr),qcov(nullptr),qcorr(nullptr),qind(nullptr),invn(nullptr),mp(nullptr),mpi(nullptr),len(0),sublen(0),qcount(0) {};
+   double* ts;
+   double* invn;
+   double* mp;
+   int* mpi;
+   int len;
+   query_desc q;
+   corr_desc c;
+
+   void alloc(){
+
    }
-}*/
+   void free_buffers(){
+
+   }
+   void free_all(){
+
+   }
+  
+
+};
+
+
 
 
 void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const double* __restrict__ mu, int len, int sublen){
@@ -25,12 +68,12 @@ void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const 
       double term = ts[i] - mu[0];
       a += term*term;
    }
-   invn[0] = 1.0/s;
+   invn[0] = 1.0/a;
    for(int i = sublen; i < len-sublen+1; i++){
       double b = ts[i-sublen];
       double c = ts[i];
-      s += ((b - mu[i-sublen]) + (c - mu[i]) * (b - c); 
-      invn[i-sublen] = 1.0/s;
+      a += ((b - mu[i-sublen]) + (c - mu[i])) * (b - c); 
+      invn[i-sublen] = 1.0/a;
    }
 }
 
@@ -53,7 +96,6 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
 
 
 // This is probably the best I can do without avx
-
 void max_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double qinvn, double qcov, double qcorr, int qind, int qbaseind, int offset, int count){
    const int unroll = 8;
    int aligned = count - count%unroll + offset;
@@ -116,20 +158,20 @@ void max_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const 
 
 
 
+
 // The time complexity of this is linear or close to linear, so we can get it working and ignore
 // I changed it to a zigzag pattern. 
 //
-void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ invn, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen, int len){
+void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double* __restrict__ invn, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen, int len){
    for(int i = 0; i < count; i++){
-      c = qcov[i];
       int qi = qind[i];
       int ci = i*stride;
       int lim = std::min(ci,qi);
       lim = std::min(extraplen,lim);
       double c = qcov[i];
       for(int j = 0; j < lim; j++){
-         c -= dx[ci-j]*df[qi-j];
-         c -= dx[qi-j]*df[ci-j];
+      //   c -= dx[ci-j]*df[qi-j];
+      //   c -= dx[qi-j]*df[ci-j];
          double scale = invn[qi]*invn[ci];
          double corr = c*scale;
          if(mp[ci] < corr){
@@ -143,11 +185,11 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
          --ci;
          --qi;
       }
-      int lim = std::max(ci,qi);
+      lim = std::max(ci,qi);
       lim = std::min(extraplen,len-lim);
       for(int j = 0; j < lim; j++){
-         c += dx[ci]*df[qi];
-         c += dx[qi]*df[ci];
+      //   c += dx[ci]*df[qi];
+     //    c += dx[qi]*df[ci];
          double scale = invn[qi]*invn[ci];
          double corr = c*scale;
          if(mp[ci] < corr){
@@ -165,4 +207,47 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
 }
 
 
-/
+
+
+
+// if it's not parallel, we allocate fewer buffers assume parallel for interactivity
+void prescr_exec_parallel(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, double* qbuf, double* __restrict__ qcov, double* __restrict__ qcorr, double* __restrict__ corr, double* __restrict__ mp, int* __restrict__ qind, int* __restrict__ mpi, int len, int qstride, int tsstride, int extraplen, int sublen){
+   int qcount = len/qstride;
+   int qmemstride = 64; // sentinel value, should be on an appropriate boundary for MKL
+   int qbufcount = 10;
+   int kstride = 65536;
+   int kmemstride = 65536; // since correlation op outputs n + m - 1, we may need to round things or maybe just use separate buffers? not sure here really what is optimal
+   // initialize corr descriptors
+   for(int i = 0; i < qcount; i++){
+      #pragma omp parallel for
+      for(int j = 0; j < qbufcount; j++){
+         double qm = mu[j*qstride];
+         for(int k = 0; k < sublen; k++){
+            qbuf[j*qmemstride+k] = ts[j*qstride+k] - qm;
+         }
+      }
+      #pragma omp parallel for
+      for(int j = 0; j < len; j+= kstride){
+         for(int k = 0; k < qbufcount; k++){
+           // corr(ts+j*kstride,
+           // reduce
+            
+         }
+      }
+   }
+   // refine stage
+
+}
+
+
+
+void prescr_base(const double* __restrict__ ts, int len, int sublen){
+   struct mp_task;
+   
+
+}
+
+
+
+
+
