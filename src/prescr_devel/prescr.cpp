@@ -9,6 +9,33 @@
 // this is probably an acceptable way to do it, 
 // I was debating whether I should loop over singles in a parallel region
 // Perhaps should consult elsewhere?
+
+
+// should be inlined
+/*void normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, double mu, double invn, int qstart, int sublen){
+   for(int j = 0; j < sublen; j++){
+      qbuf[j] = (ts[j]-qm)*qinvn;
+   }
+}*/
+
+
+void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const double* __restrict__ mu, int len, int sublen){
+   double a = 0;
+   for(int i = 0; i < sublen; i++){
+      double term = ts[i] - mu[0];
+      a += term*term;
+   }
+   invn[0] = 1.0/s;
+   for(int i = sublen; i < len-sublen+1; i++){
+      double b = ts[i-sublen];
+      double c = ts[i];
+      s += ((b - mu[i-sublen]) + (c - mu[i]) * (b - c); 
+      invn[i-sublen] = 1.0/s;
+   }
+}
+
+
+// mmay not be needed
 void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int qstart, int count, int sublen, int step){
    #pragma omp parallel for
    for(int i = 0; i < count; i++){
@@ -25,23 +52,23 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
 }
 
 
-
 // This is probably the best I can do without avx
 
-void max_partial_autocorr_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, int offset, int count, int qbase){
+void max_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double qinvn, double qcov, double qcorr, int qind, int qbaseind, int offset, int count){
    const int unroll = 8;
    int aligned = count - count%unroll + offset;
-   double qcorr = -1.0;
-   int qind;
    for(int i = offset; i < aligned; i+= unroll){
       block<double> corr;
       for(int j = 0; j < unroll; j++){
          corr(j) = cov[i+j]*invn[i+j];
       }
       for(int j = 0; j < unroll; j++){
+         corr(j) = cov[i+j]*invn[i+j];
+      }
+      for(int j = 0; j < unroll; j++){
          if(xcorr[i+j] < corr(j)){
             xcorr[i+j] = corr(j);
-            cindex[i+j] = qbase;
+            cindex[i+j] = qbaseind;
          }
       }
       block<int> cind;
@@ -63,12 +90,13 @@ void max_partial_autocorr_reduction(double* __restrict__ cov,  double* __restric
       if(corr(0) < corr(4)){
          if(qcorr < corr(4)){
             qcorr = corr(4);
-            qind = cind(4);
+            qind = i+cind(4);
+            qcov = cov[i+cind(4)];
          }
       }
       else if(qcorr < corr(0)){
          qcorr = corr(0);
-         qind = cind(0);
+         qind = cov[i+cind(0)];
       }
    }
    for(int i = aligned; i < offset+count; i++){
@@ -76,14 +104,14 @@ void max_partial_autocorr_reduction(double* __restrict__ cov,  double* __restric
       if(qcorr < corr){
          qcorr = corr;
          qind =  i;  //<-- this way it's only forward iteration. Doing both consecutively may partially invalidate  hardware prefetching
+         qcov = cov[i];
       } 
       if(xcorr[i] < corr){
          xcorr[i] = corr;
-         cindex[i] = qbase;
+         cindex[i] = qbaseind;
       }
    }
-   cindex[qbase] = qind;  // <-- temporary so these aren't optimized out
-   xcorr[qbase] = qcorr;
+   return ; // qcorr, qcov, qind, 
 }
 
 
@@ -133,68 +161,8 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
          ++ci; 
          ++qi;
       }
-      
    }
 }
 
 
-
-
-/*
-// We shall see may not use this
-void batch_partial_autocov(double* __restrict__ cbuf, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, const int* __restrict__ qind, int qstart, int count, int sublen, int step){
-   #pragma omp parallel for
-   for(int i = 0; i < count; i++){
-      int qi = (qstart+i)*step;  
-      int ci = qind[qi];
-      double cm = mu[ci];
-      double qm = mu[qi];
-      double cv = 0;
-      for(int j = 0; j < sublen; j++){
-         cv += (ts[ci] - cm)*(ts[qi] - qm);
-         ++qi;
-         ++ci;
-      }
-      cbuf[i] = cv;
-   }
-}*/
-
-// Maybe skip the partitioning. We have strong cache reuse over the query section via df, dg
-//
-
-
-// experimental section
-/*typedef __m256d vtype;
-
-void avx_max_corr_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, int* __restrict__ cindex, double* __restrict__ invn, double qcorr, int qind, int qbase, int offset, int count){
-   const int simlen = 4;
-   const int unroll = 4;
-   int aligned = count - count%unroll + offset;
-  for(int i = offset; i < aligned; i+= unroll*simlen){
-      block<vtype> corr;
-     for(int j = 0; j < unroll; j++){
-         corr(j) = aload(cov,i+j*simlen)*uload(inv,i+j*simlen);
-      }
-      block<vtype> mask;
-      block<vtype> aux;
-      for(int j = 0; j < unroll; j++){
-         aux(j) = uload(xcorr,i+j*simlen);
-         mask(j) = corr(j) > uload(xcorr,i+j*simlen);
-      }
-      for(int j = 0; j < unroll; j+=simlen){
-         blend(corr(j),aux(j),mask(j));
-         aux(j) = blend(
-      }
-   }
-}
-
-// q is typically pre-normalized, but here we need centered only
-double autocov_single(const double* __restrict__ ts, double tmu, double qmu, int offset, int qoffset, int sublen){
-   double q = 0;
-   for(int i = 0; i < sublen; i++){
-      q += (ts[offset+i]-tmu)*(ts[qoffset+i]-qmu);
-   }
-   return q;
-}
-
-*/
+/
