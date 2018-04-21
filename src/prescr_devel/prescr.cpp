@@ -13,7 +13,12 @@
 // somehow I'm not familiar with convention here on default initialization.
 
 
-struct query_desc{
+struct mkl_descs{
+   // mkl corr descriptor array here
+
+};
+
+struct corr_databuffers{
    double* qbuf;  //
    double* qcov;  //
    double* qcorr; // need to know this
@@ -24,37 +29,36 @@ struct query_desc{
    double* cbuf;  // 
    double* xcorr; // cross correlation 
    int* xcorrind; // cross correlation index
+};
+
+
+struct corr_desc{
    int qbufcount; // number of query buffers
-   int clen;       //total number of cross correlations
-   int cbufcount;  //number of active correlation buffers
-   int cstride;    //stride with respect to time series
-   int cmemstride; //stride with respect to conv buffer
-   int qstride;    //stride with respect to time series (distribution of queries)
-   int qmemstride; //query stride with respect to query buffer
    int qtotalcount;//number of batch queries 
    int qlen;       //query / subsequence length
-   
+   int qstride;    //stride with respect to time series (distribution of queries)
+   int qbufstride; //query stride with respect to query buffer
+   int cbufcount;  //number of active correlation buffers
+   int ctotalcount;
+   int clen;       //total number of cross correlations
+   int cstride;    //stride with respect to time series
+   int cbufstride; //stride with respect to conv buffer
+  
    // example, functions should be like this
    // nullptr could signify an error, but I'm not sure whether this is the best idea
-   static inline double* buffer(int i) {
-      if(i < qcount){
-         return qbuf + i*memstride;
-      else{
-         return nullptr;
-      }
+   inline int qbuffer(int i){
+      return i*qbufstride;
    }
+   inline int cbuffer(int i){
+      return i*cbufstride;
+   }
+};
 
-}
 
 struct prescr_desc{
-   prescr_desc() : ts(nullptr),qcov(nullptr),qcorr(nullptr),qind(nullptr),invn(nullptr),mp(nullptr),mpi(nullptr),len(0),sublen(0),qcount(0) {};
+   //prescr_desc() : ts(nullptr),qcov(nullptr),qcorr(nullptr),qind(nullptr),invn(nullptr),mp(nullptr),mpi(nullptr),len(0),sublen(0),qcount(0) {};
    double* ts;
    double* invn;
-   double* mp;
-   int* mpi;
-   int len;
-   query_desc q;
-   corr_desc c;
 
    void alloc(){
 
@@ -68,8 +72,6 @@ struct prescr_desc{
   
 
 };
-
-
 
 
 void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const double* __restrict__ mu, int len, int sublen){
@@ -220,27 +222,25 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
 
 
 
-
-
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-void prescr_exec_partialauto(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, double* qbuf, double* __restrict__ qcov, double* __restrict__ qcorr, double* __restrict__ corr, double* __restrict__ mp, int* __restrict__ qind, int* __restrict__ mpi, int len, int qstride, int tsstride, int extraplen, int sublen){
-   int qcount = len/qstride;
-   int qmemstride = 64; // sentinel value, should be on an appropriate boundary for MKL
-   int qbufcount = 10;
-   int kstride = 65536;
-   int kmemstride = 65536; // since correlation op outputs n + m - 1, we may need to round things or maybe just use separate buffers? not sure here really what is optimal
+void prescr_exec_partialauto(const struct corr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn){
+//   int qmemstride = 64; // sentinel value, should be on an appropriate boundary for MKL
+//   int qbufcount = 10;
+//   int kstride = 65536;
+//   int kmemstride = 65536; // since correlation op outputs n + m - 1, we may need to round things or maybe just use separate buffers? not sure here really what is optimal
    // initialize corr descriptors
-   for(int i = 0; i < qcount; i++){
+   for(int i = 0; i < crd->qbufcount; i++){  // replace with qtotal
       #pragma omp parallel for
-      for(int j = 0; j < qbufcount; j++){
+      for(int j = 0; j < crd->qbufcount; j++){
          double qm = mu[j*qstride];
          for(int k = 0; k < sublen; k++){
-            qbuf[j*qmemstride+k] = ts[j*qstride+k] - qm;
+            crd->qbuf[j*qmemstride+k] = ts[j*qstride+k] - qm;
          }
       }
       #pragma omp parallel for
-      for(int j = 0; j < len; j+= kstride){
+      for(int j = 0; j < ccount; ){
          for(int k = 0; k < qbufcount; k++){
+           //
            // corr(ts+j*kstride,
            // reduce
             
@@ -248,7 +248,6 @@ void prescr_exec_partialauto(const double* __restrict__ ts, const double* __rest
       }
    }
    // refine stage
-
 }
 
 
