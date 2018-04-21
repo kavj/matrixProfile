@@ -14,27 +14,37 @@
 
 
 struct query_desc{
+   double* qbuf;  //
+   double* qcov;  //
+   double* qcorr; // need to know this
+   double* qmu;   // may be helpful when 
+   double* qinvn; //
+   int* qbase;    //
+   int* qmatch;   //
+   double* cbuf;  // 
+   double* xcorr; // cross correlation 
+   int* xcorrind; // cross correlation index
+   int qbufcount; // number of query buffers
+   int clen;       //total number of cross correlations
+   int cbufcount;  //number of active correlation buffers
+   int cstride;    //stride with respect to time series
+   int cmemstride; //stride with respect to conv buffer
+   int qstride;    //stride with respect to time series (distribution of queries)
+   int qmemstride; //query stride with respect to query buffer
+   int qtotalcount;//number of batch queries 
+   int qlen;       //query / subsequence length
+   
+   // example, functions should be like this
+   // nullptr could signify an error, but I'm not sure whether this is the best idea
+   static inline double* buffer(int i) {
+      if(i < qcount){
+         return qbuf + i*memstride;
+      else{
+         return nullptr;
+      }
+   }
 
-   double* qbuf;
-   double* qcov;
-   double* qcorr;
-   double* qmu;
-   double* qinvn;
-   int*qind;
-   int qbufcount;
-   int qstride;
-   int qmemstride;
-   int qcount; 
-   int querylen;
 }
-
-struct corr_desc{
-   double* corrbuf;
-   int section_len;
-   int memstride;
-   int bufcount;
-}
-
 
 struct prescr_desc{
    prescr_desc() : ts(nullptr),qcov(nullptr),qcorr(nullptr),qind(nullptr),invn(nullptr),mp(nullptr),mpi(nullptr),len(0),sublen(0),qcount(0) {};
@@ -188,6 +198,8 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
       lim = std::max(ci,qi);
       lim = std::min(extraplen,len-lim);
       for(int j = 0; j < lim; j++){
+      // use the original formulas instead, this section doesn't justify more buffers
+ 
       //   c += dx[ci]*df[qi];
      //    c += dx[qi]*df[ci];
          double scale = invn[qi]*invn[ci];
@@ -211,7 +223,7 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
 
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-void prescr_exec_parallel(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, double* qbuf, double* __restrict__ qcov, double* __restrict__ qcorr, double* __restrict__ corr, double* __restrict__ mp, int* __restrict__ qind, int* __restrict__ mpi, int len, int qstride, int tsstride, int extraplen, int sublen){
+void prescr_exec_partialauto(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, double* qbuf, double* __restrict__ qcov, double* __restrict__ qcorr, double* __restrict__ corr, double* __restrict__ mp, int* __restrict__ qind, int* __restrict__ mpi, int len, int qstride, int tsstride, int extraplen, int sublen){
    int qcount = len/qstride;
    int qmemstride = 64; // sentinel value, should be on an appropriate boundary for MKL
    int qbufcount = 10;
@@ -240,12 +252,6 @@ void prescr_exec_parallel(const double* __restrict__ ts, const double* __restric
 }
 
 
-
-void prescr_base(const double* __restrict__ ts, int len, int sublen){
-   struct mp_task;
-   
-
-}
 
 
 
