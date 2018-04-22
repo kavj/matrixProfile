@@ -1,41 +1,9 @@
 #include<algorithm>
 #include<cstdint>
 #include "../utils/reg.h"
+#include "descriptors.h"
 
 
-// This could probably use some cleanup
-// centered unit normalization
-// this is probably an acceptable way to do it, 
-// I was debating whether I should loop over singles in a parallel region
-// Perhaps should consult elsewhere?
-
-
-// somehow I'm not familiar with convention here on default initialization.
-
-
-struct mkl_descs{
-   // mkl corr descriptor array here
-
-};
-
-
-struct prescr_desc{
-   //prescr_desc() : ts(nullptr),qcov(nullptr),qcorr(nullptr),qind(nullptr),invn(nullptr),mp(nullptr),mpi(nullptr),len(0),sublen(0),qcount(0) {};
-   double* ts;
-   double* invn;
-
-   void alloc(){
-
-   }
-   void free_buffers(){
-
-   }
-   void free_all(){
-
-   }
-  
-
-};
 
 
 void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const double* __restrict__ mu, int len, int sublen){
@@ -52,7 +20,6 @@ void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const 
       invn[i-sublen] = 1.0/a;
    }
 }
-
 
 // mmay not be needed
 void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int qstart, int count, int sublen, int step){
@@ -129,13 +96,14 @@ void max_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const 
          cindex[i] = qbaseind;
       }
    }
-   return ; // qcorr, qcov, qind, 
+   return;
+
 }
 
 
-
+// need to add structs in here
 // This might be reworked later to remove temporary buffers or to wrap the messy formulas in small inline functions, not sure really but it's too hard to read with inline formulas
-void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double* __restrict__ invn, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen, int len){
+void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double* __restrict__ invn, const double* __restrict__ df, const double* __restrict__ dx, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen, int len){
    for(int i = 0; i < count; i++){
       int qi = qind[i];
       int ci = i*stride;
@@ -147,18 +115,18 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
          double corr = c*invn[qi]*invn[ci];
          if(mp[ci-j] < corr){
             mp[ci-j] = corr;
-            mpi[ci-j] = qi+j;
+            mpi[ci-j] = qi-j;
          }
          if(mp[qi] < corr){
             mp[qi-j] = corr;
-            mpi[qi-j] = ci-j;;
+            mpi[qi-j] = ci-j;
          }
       }
       lim = std::min(extraplen,len-std::max(ci,qi));
       c = qcov[i];
       for(int j = 1; j < lim; j++){
          c += dx[ci]*df[qi];
-         c += dx[qi]*df[ci];; 
+         c += dx[qi]*df[ci]; 
          double corr = c*invn[qi]*invn[ci];
          if(mp[ci+j] < corr){
             mp[ci+j] = corr;
@@ -180,14 +148,14 @@ void prescr_exec_partialauto(const struct corr_desc* __restrict__ crd, const dou
    for(int i = 0; i < crd->qbufcount; i++){  // replace with qtotal
       #pragma omp parallel for
       for(int j = 0; j < crd->qbufcount; j++){
-         double qm = mu[j*qstride];
-         for(int k = 0; k < sublen; k++){
-            crd->qbuf[j*qmemstride+k] = ts[j*qstride+k] - qm;
+         double qm = mu[j*crd->qstride];
+         for(int k = 0; k < crd->querylen; k++){
+           // crd->qbuf[j*qmemstride+k] = ts[j*qstride+k] - qm;
          }
       }
       #pragma omp parallel for
-      for(int j = 0; j < ccount; ){
-         for(int k = 0; k < qbufcount; k++){
+      for(int j = 0; j < crd->ccount; ){
+         for(int k = 0; k < crd->qbufcount; k++){
            //
            // corr(ts+j*kstride,
            // reduce
