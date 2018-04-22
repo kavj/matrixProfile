@@ -18,42 +18,6 @@ struct mkl_descs{
 
 };
 
-struct corr_databuffers{
-   double* qbuf;  //
-   double* qcov;  //
-   double* qcorr; // need to know this
-   double* qmu;   // may be helpful when 
-   double* qinvn; //
-   int* qbase;    //
-   int* qmatch;   //
-   double* cbuf;  // 
-   double* xcorr; // cross correlation 
-   int* xcorrind; // cross correlation index
-};
-
-
-struct corr_desc{
-   int qbufcount; // number of query buffers
-   int qtotalcount;//number of batch queries 
-   int qlen;       //query / subsequence length
-   int qstride;    //stride with respect to time series (distribution of queries)
-   int qbufstride; //query stride with respect to query buffer
-   int cbufcount;  //number of active correlation buffers
-   int ctotalcount;
-   int clen;       //total number of cross correlations
-   int cstride;    //stride with respect to time series
-   int cbufstride; //stride with respect to conv buffer
-  
-   // example, functions should be like this
-   // nullptr could signify an error, but I'm not sure whether this is the best idea
-   inline int qbuffer(int i){
-      return i*qbufstride;
-   }
-   inline int cbuffer(int i){
-      return i*cbufstride;
-   }
-};
-
 
 struct prescr_desc{
    //prescr_desc() : ts(nullptr),qcov(nullptr),qcorr(nullptr),qind(nullptr),invn(nullptr),mp(nullptr),mpi(nullptr),len(0),sublen(0),qcount(0) {};
@@ -114,7 +78,7 @@ void max_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const 
    for(int i = offset; i < aligned; i+= unroll){
       block<double> corr;
       for(int j = 0; j < unroll; j++){
-         corr(j) = cov[i+j]*invn[i+j];
+         corr(j) = cov[i+j]*qinvn;;
       }
       for(int j = 0; j < unroll; j++){
          corr(j) = cov[i+j]*invn[i+j];
@@ -154,7 +118,7 @@ void max_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const 
       }
    }
    for(int i = aligned; i < offset+count; i++){
-      double corr = cov[i]*invn[i];
+      double corr = cov[i]*qinvn*invn[i];
       if(qcorr < corr){
          qcorr = corr;
          qind =  i;  //<-- this way it's only forward iteration. Doing both consecutively may partially invalidate  hardware prefetching
@@ -170,65 +134,49 @@ void max_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const 
 
 
 
-
-// The time complexity of this is linear or close to linear, so we can get it working and ignore
-// I changed it to a zigzag pattern. 
-//
+// This might be reworked later to remove temporary buffers or to wrap the messy formulas in small inline functions, not sure really but it's too hard to read with inline formulas
 void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double* __restrict__ invn, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen, int len){
    for(int i = 0; i < count; i++){
       int qi = qind[i];
       int ci = i*stride;
-      int lim = std::min(ci,qi);
-      lim = std::min(extraplen,lim);
+      int lim = std::min(extraplen,std::min(ci,qi));
       double c = qcov[i];
-      for(int j = 0; j < lim; j++){
-      //   c -= dx[ci-j]*df[qi-j];
-      //   c -= dx[qi-j]*df[ci-j];
-         double scale = invn[qi]*invn[ci];
-         double corr = c*scale;
-         if(mp[ci] < corr){
-            mp[ci] = corr;
-            mpi[ci] = qi;
+      for(int j = 1; j < lim; j++){
+         c -= dx[ci]*df[qi];
+         c -= dx[qi]*df[ci];
+         double corr = c*invn[qi]*invn[ci];
+         if(mp[ci-j] < corr){
+            mp[ci-j] = corr;
+            mpi[ci-j] = qi+j;
          }
          if(mp[qi] < corr){
-            mp[qi] = corr;
-            mpi[qi] = ci;
+            mp[qi-j] = corr;
+            mpi[qi-j] = ci-j;;
          }
-         --ci;
-         --qi;
       }
-      lim = std::max(ci,qi);
-      lim = std::min(extraplen,len-lim);
-      for(int j = 0; j < lim; j++){
-      // use the original formulas instead, this section doesn't justify more buffers
- 
-      //   c += dx[ci]*df[qi];
-     //    c += dx[qi]*df[ci];
-         double scale = invn[qi]*invn[ci];
-         double corr = c*scale;
-         if(mp[ci] < corr){
-            mp[ci] = corr;
-            mpi[ci] = qi;
+      lim = std::min(extraplen,len-std::max(ci,qi));
+      c = qcov[i];
+      for(int j = 1; j < lim; j++){
+         c += dx[ci]*df[qi];
+         c += dx[qi]*df[ci];; 
+         double corr = c*invn[qi]*invn[ci];
+         if(mp[ci+j] < corr){
+            mp[ci+j] = corr;
+            mpi[ci+j] = qi+j;
          }
-         if(mp[qi] < corr){
-            mp[qi] = corr;
-            mpi[qi] = ci;
+         if(mp[qi+j] < corr){
+            mp[qi+j] = corr;
+            mpi[qi+j] = ci+j;
          }
-         ++ci; 
-         ++qi;
       }
    }
 }
 
 
-
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
 void prescr_exec_partialauto(const struct corr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn){
-//   int qmemstride = 64; // sentinel value, should be on an appropriate boundary for MKL
-//   int qbufcount = 10;
-//   int kstride = 65536;
-//   int kmemstride = 65536; // since correlation op outputs n + m - 1, we may need to round things or maybe just use separate buffers? not sure here really what is optimal
-   // initialize corr descriptors
+
+  // initialize corr descriptors
    for(int i = 0; i < crd->qbufcount; i++){  // replace with qtotal
       #pragma omp parallel for
       for(int j = 0; j < crd->qbufcount; j++){
@@ -249,10 +197,5 @@ void prescr_exec_partialauto(const struct corr_desc* __restrict__ crd, const dou
    }
    // refine stage
 }
-
-
-
-
-
 
 
