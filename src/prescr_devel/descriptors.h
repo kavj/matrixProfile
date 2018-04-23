@@ -4,30 +4,44 @@
 
 
 
+int init(int buffercount, int bufferlen, int alignment){
+   int padding = bufferlen - (bufferlen - alignment%sizeof(double));
+   // I should sanitize input somewhere so that this can't overflow
+   if(bufferlen%alignment){
+      bufferlen += alignment;
+      bufferlen -= bufferlen%alignment;
+   }
+   // allocate all using aligned allocator
+}
 
+
+// this should have a constructor and destructor. It can be passed as a constant to multithreaded code sections
 struct qbuf{
-   // Todo: explicit constructor and destructor. These can be assigned per block correlation section, so each section tracks a set of best so far reductions for the query set.
-   // We require as many descriptors as max threads
    double* q;  
-   int bufct;
-   int qlen;
-   int bufstride;
-   int ct;
+   int queryct;
+   int querylen;
+   int blockstride;
+   int blockct;
+};
+
+struct qstats{
    double* qcov;  // covariance of optimal query match, multiple copies are used in the case of multiple queries
    double* qcorr; // need to know this
    int* qbase;    // stores the base index of each query with respect to the time series from which it was sampled
    int* qmatch;   // nearest neighbor index for each query
+   int stride;
    int numcopies;    // since a lot of this is effectively read only (could enforce that) it is just strided, We don't allocate or deallocate in a shared section, and we avoid any cache line overlaps
+
 };
 
 struct p_autocorr_desc{
    double* xcorr;
    int* xind;
    VSLCorrTaskPtr* covdescs;
-   int sectct;
+   int blockct;
    int len;       //length of reduced cross correlation vector
    int blocklen;    //length of each correlation block section
-   int bufstride; //stride with respect to correlation buffer, a stride in memory accounts for fringe portions and elements used to pad memory alignment
+   int blockstride; //stride with respect to correlation buffer, a stride in memory accounts for fringe portions and elements used to pad memory alignment
    int taillen;   // <-- sections can be long so this is unpadded
    int sublen;
    // should clean up task pointers as necessary ?
