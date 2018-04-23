@@ -14,7 +14,6 @@ int init(int buffercount, int bufferlen, int alignment){
    // allocate all using aligned allocator
 }
 
-
 // this should have a constructor and destructor. It can be passed as a constant to multithreaded code sections
 struct qbuf{
    double* q;  
@@ -27,12 +26,14 @@ struct qstats{
    double* qcov;  // covariance of optimal query match, multiple copies are used in the case of multiple queries
    double* qcorr; // need to know this
    int* qmatch;   // nearest neighbor index for each query
+   int blockstride;
 };
 
-struct p_autocorr_desc{
+struct p_autocorr_desc{  
    double* xcorr;
    int* xind;
    VSLCorrTaskPtr* covdescs;
+   double* cov;
    int blockct;
    int len;       //length of reduced cross correlation vector
    int blocklen;    //length of each correlation block section
