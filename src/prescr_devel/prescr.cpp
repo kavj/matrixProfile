@@ -139,41 +139,46 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
 
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-void maxpearson_partialauto(const struct p_autocorr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, VSLCorrTaskPtr* v, struct qbuf* qb){
-   const int sectionct = crd->sectct;
-   const int qbufct = qb->qbufct;
-   const int qlen = qb->qlen;
-   const int cbufct = crd->blockct;
-   const int qstride = qb->bufstride;
-   // like below this should be determined at build time
-   for(int i = 0; i < ccount; i++){  // <-- this is probably wrong, I change things too frequently
+int  maxpearson_partialauto(struct p_autocorr_desc* __restrict__ crd,struct qstats* qs, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, VSLCorrTaskPtr* v, struct qbuf* qb){
+   int corrstat = 0;
+   for(int i = 0; i < qb->querytotalct; i+= qb->blockct){  // <-- this is probably wrong, I change things too frequently
+      int qct = std::min(qb->blockct,qb->querytotalct-i);
       #pragma omp parallel for
-      for(int j = 0; j < qbufct; j++){
+      for(int j = 0; j < qb->blockct; j++){
          double qm = mu[j*qstride];
-         for(int k = 0; k < querylen; k++){
-            qbuf[j*qbufstride+k] = ts[j*qstride+k] - qm;
+         for(int k = 0; k < qb->querylen; k++){
+            qb->qbuf[j*qb->blockstride+k] = ts[j*qb->blockstride+k] - qm;
          }
       }
       #pragma omp parallel for
-      for(int j = 0; j < cbufcount; j++){
-         if(j == cbufcount-1){  // may be truncated
-            int status = vsldCorrExecX1D(v[i],qbuf[j*qbufstride],1,
-            if(status == ){
-               //max_fused_scale_reduce(qbuf[j*qbufstride],
+      for(int j = 0; j < blockct; j++){
+         if(j != qb->blockct-1){  
+            int status = vsldCorrExecX1D(v[i],qbuf[j*qbufstride],1,);
+            if(status == VSL_STATUS_OK){
+
+               void fused_max_reduce(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double &qcov, double& qcorr, int& qind, int qinvn, int qbaseind, int offset, int count){
+               q
+
+               max_fused_scale_reduce(qbuf+j*qstride],)
+            }
+            else{
+               // Todo: make this into something threadsafe
+               corrstat=-1;
             }
          }
          else{
-            for(int k = 0; k < qbufcount; k++){
+            for(int k = 0; k ; k++){
                
             }
          }
       }
    }
    // reduce over thread buffers
-   for(int i = 0; i < ccount; i++){
-
+   for(int i = 0; i < qb->numcopies; i++){
+      
    }
    //maxpearson_extrap_partialauto(qcov,invn,df,dx,qind, mp,mpi,count,stride,extraplen,len);
+   return 0;
 }
 
 
