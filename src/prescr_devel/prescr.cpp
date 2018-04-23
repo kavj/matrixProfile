@@ -4,8 +4,6 @@
 #include "descriptors.h"
 
 
-
-
 void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const double* __restrict__ mu, int len, int sublen){
    double a = 0;
    for(int i = 0; i < sublen; i++){
@@ -39,7 +37,7 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
 
 
 // This is probably the best I can do without avx
-void max_reduction(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double qinvn, double qcov, double qcorr, int qind, int qbaseind, int offset, int count){
+void max_fused_scale_reduce(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double qinvn, double qcov, double qcorr, int qind, int qbaseind, int offset, int count){
    const int unroll = 8;
    int aligned = count - count%unroll + offset;
    for(int i = offset; i < aligned; i+= unroll){
@@ -140,26 +138,60 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
    }
 }
 
+    VSLCorrTaskPtr task;
+    int status = vsldCorrNewTaskX1D(&task, VSL_CORR_MODE_FFT, (n), m, (n+m-1), T, 1); // pointer, mode, xshape,yshape,zshape,x,xstride <-- typically 1
+    if(status != VSL_STATUS_OK){
+       printf("problem initializing");
+    }
+    for(int i = 0; i < 65384; i++){
+       q[1] += 0.0001;
+       status = vsldCorrExecX1D(task,q,1,buffer,1);
+       if(status != VSL_STATUS_OK){
+          printf("problem executing\n");
+       }
+    }
+
+void  init_taskptrs(struct corr_desc* crd, VSLCorrTaskPtr* taskptr){
+   for(int i = 0; i < crd->ccount; i++){
+      int status = vsldCorrNewTaskX1D(taskptr+i,VSL_CORR_MODE_FFT,crd->clen,crd->qlen,T+i*crd->cstride,1);
+    //  int status = vsldCorrNewTaskX1D(&task, VSL_CORR_MODE_FFT, (n), m, (n+m-1), T, 1); // pointer, mode, xshape,yshape,zshape,x,xstride <-- typically 1
+      if(status != VSL_STATUS_OK){
+         perror("could not initialize tasks");
+         exit(1);
+      }
+   }
+}
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-void prescr_exec_partialauto(const struct corr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn){
+void prescr_exec_partialauto(const struct corr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, VSLCorrTaskPtr* v, struct corr_buffers* crb){
 
   // initialize corr descriptors
-   for(int i = 0; i < crd->qbufcount; i++){  // replace with qtotal
+   init_taskptrs(crd,v);
+   double* qbuf = crb->qbuf;
+   const int ccount = crd->ccount;
+   const int qbufcount = crd->qbufcount;
+   const int querylen = crd->querylen;
+   const int cbufcount = crd->cbufcount;
+   
+   // like below this should be determined at build time
+   
+   for(int i = 0; i < qbufcount; i++){  // replace with qtotal
       #pragma omp parallel for
-      for(int j = 0; j < crd->qbufcount; j++){
-         double qm = mu[j*crd->qstride];
-         for(int k = 0; k < crd->querylen; k++){
-           // crd->qbuf[j*qmemstride+k] = ts[j*qstride+k] - qm;
+      for(int j = 0; j < qbufcount; j++){
+         double qm = mu[j*qstride];
+         for(int k = 0; k < querylen; k++){
+            qbuf[j*qbufstride+k] = ts[j*qstride+k] - qm;
          }
       }
       #pragma omp parallel for
-      for(int j = 0; j < crd->ccount; ){
-         for(int k = 0; k < crd->qbufcount; k++){
-           //
-           // corr(ts+j*kstride,
-           // reduce
-            
+      for(int j = 0; j < cbufcount; ){
+         if(j == cbufcount-1){  // may be truncated
+            int status = vsldCorrExecX1D(v[i],qbuf[j*qbufstride],1,
+         }
+         else{
+            for(int k = 0; k < qbufcount; k++){
+               
+            }
          }
       }
    }
