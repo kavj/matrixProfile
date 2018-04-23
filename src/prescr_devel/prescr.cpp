@@ -38,7 +38,7 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
 
 // This is probably the best I can do without avx
 // I'm not completely happy with this, because it relies on updating a non-const reference
-void max_fused_scale_reduce(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, struct qdesc& q, int qinvn, int qbaseind, int offset, int count){
+void fused_max_reduce(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double& qcorr, int &qind, int& qind, int qinvn, int qbaseind, int offset, int count){
    const int unroll = 8;
    int aligned = count - count%unroll + offset;
    for(int i = offset; i < aligned; i+= unroll){
@@ -100,7 +100,7 @@ void max_fused_scale_reduce(double* __restrict__ cov,  double* __restrict__ xcor
 
 // need to add structs in here
 // This might be reworked later to remove temporary buffers or to wrap the messy formulas in small inline functions, not sure really but it's too hard to read with inline formulas
-void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double* __restrict__ invn, const double* __restrict__ df, const double* __restrict__ dx, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen, int len){
+void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restrict__ invn, const double* __restrict__ df, const double* __restrict__ dx, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen, int len){
    for(int i = 0; i < count; i++){
       int qi = qind[i];
       int ci = i*stride;
@@ -139,7 +139,7 @@ void maxpearson_extrap_partialauto(const double* __restrict__ qcov, const double
 
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-void prescr_exec_partialauto(const struct corr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, VSLCorrTaskPtr* v, struct qbuf* qb){
+void maxpearson_partialauto(const struct corr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, VSLCorrTaskPtr* v, struct qbuf* qb){
    double* qbuf = crb->qbuf;
    const int ccount = crd->ccount;
    const int qbufcount = crd->qbufcount;
