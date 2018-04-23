@@ -139,15 +139,16 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
 
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-void maxpearson_partialauto(const struct xcorr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, VSLCorrTaskPtr* v, struct qbuf* qb){
-   const int ccount = crd->ccount;
-   const int qbufcount = qb->qbufcount;
+void maxpearson_partialauto(const struct p_autocorr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, VSLCorrTaskPtr* v, struct qbuf* qb){
+   const int sectionct = crd->sectct;
+   const int qbufct = qb->qbufct;
    const int qlen = qb->qlen;
-   const int cbufcount = crd->seccount;
+   const int cbufct = crd->blockct;
+   const int qstride = qb->bufstride;
    // like below this should be determined at build time
    for(int i = 0; i < ccount; i++){  // <-- this is probably wrong, I change things too frequently
       #pragma omp parallel for
-      for(int j = 0; j < qbufcount; j++){
+      for(int j = 0; j < qbufct; j++){
          double qm = mu[j*qstride];
          for(int k = 0; k < querylen; k++){
             qbuf[j*qbufstride+k] = ts[j*qstride+k] - qm;
@@ -158,7 +159,7 @@ void maxpearson_partialauto(const struct xcorr_desc* __restrict__ crd, const dou
          if(j == cbufcount-1){  // may be truncated
             int status = vsldCorrExecX1D(v[i],qbuf[j*qbufstride],1,
             if(status == ){
-            //   max_fused_scale_reduce(qbuf[j*qbufstride],
+               //max_fused_scale_reduce(qbuf[j*qbufstride],
             }
          }
          else{
@@ -172,7 +173,7 @@ void maxpearson_partialauto(const struct xcorr_desc* __restrict__ crd, const dou
    for(int i = 0; i < ccount; i++){
 
    }
-   maxpearson_extrap_partialauto(qcov,invn,df,dx,qind, mp,mpi,count,stride,extraplen,len);
+   //maxpearson_extrap_partialauto(qcov,invn,df,dx,qind, mp,mpi,count,stride,extraplen,len);
 }
 
 
