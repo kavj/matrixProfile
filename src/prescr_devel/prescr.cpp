@@ -38,7 +38,7 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
 
 // This is probably the best I can do without avx
 // I'm not completely happy with this, because it relies on updating a non-const reference
-void fused_max_reduce(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double& qcorr, int &qind, int& qind, int qinvn, int qbaseind, int offset, int count){
+void fused_max_reduce(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double &qcov, double& qcorr, int& qind, int qinvn, int qbaseind, int offset, int count){
    const int unroll = 8;
    int aligned = count - count%unroll + offset;
    for(int i = offset; i < aligned; i+= unroll){
@@ -72,23 +72,23 @@ void fused_max_reduce(double* __restrict__ cov,  double* __restrict__ xcorr, con
          }
       }
       if(corr(0) < corr(4)){
-         if(q.qcorr < corr(4)){
-            q.qcorr = corr(4);
-            q.qind = i+cind(4);
-            q.qcov = cov[i+cind(4)];
+         if(qcorr < corr(4)){
+            qcorr = corr(4);
+            qind = i+cind(4);
+            qcov = cov[i+cind(4)];
          }
       }
       else if(qcorr < corr(0)){
-         q.qcorr = corr(0);
-         q.qind = cov[i+cind(0)];
+         qcorr = corr(0);
+         qind = cov[i+cind(0)];
       }
    }
    for(int i = aligned; i < offset+count; i++){
       double corr = cov[i]*qinvn*invn[i];
-      if(q.qcorr < corr){
-         q.qcorr = corr;
-         q.qind =  i;  
-         q.qcov = cov[i];
+      if(qcorr < corr){
+         qcorr = corr;
+         qind =  i;  
+         qcov = cov[i];
       } 
       if(xcorr[i] < corr){
          xcorr[i] = corr;
@@ -139,12 +139,11 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
 
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-void maxpearson_partialauto(const struct corr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, VSLCorrTaskPtr* v, struct qbuf* qb){
-   double* qbuf = crb->qbuf;
+void maxpearson_partialauto(const struct xcorr_desc* __restrict__ crd, const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, VSLCorrTaskPtr* v, struct qbuf* qb){
    const int ccount = crd->ccount;
-   const int qbufcount = crd->qbufcount;
-   const int qlen = crd->qlen;
-   const int cbufcount = crd->cbufcount;
+   const int qbufcount = qb->qbufcount;
+   const int qlen = qb->qlen;
+   const int cbufcount = crd->seccount;
    // like below this should be determined at build time
    for(int i = 0; i < ccount; i++){  // <-- this is probably wrong, I change things too frequently
       #pragma omp parallel for
@@ -159,10 +158,8 @@ void maxpearson_partialauto(const struct corr_desc* __restrict__ crd, const doub
          if(j == cbufcount-1){  // may be truncated
             int status = vsldCorrExecX1D(v[i],qbuf[j*qbufstride],1,
             if(status == ){
-               //  max_fused_scale_reduce(qbuf[j*qbufstride],
-               
+            //   max_fused_scale_reduce(qbuf[j*qbufstride],
             }
-
          }
          else{
             for(int k = 0; k < qbufcount; k++){
