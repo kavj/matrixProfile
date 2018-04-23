@@ -18,10 +18,10 @@ int init(int buffercount, int bufferlen, int alignment){
 // this should have a constructor and destructor. It can be passed as a constant to multithreaded code sections
 struct qbuf{
    double* q;  
-   int queryct;
+   int querytotalct;
    int querylen;
-   int blockstride;
    int blockct;
+   int blockstride;
 };
 
 struct qstats{
@@ -31,7 +31,6 @@ struct qstats{
    int* qmatch;   // nearest neighbor index for each query
    int stride;
    int numcopies;    // since a lot of this is effectively read only (could enforce that) it is just strided, We don't allocate or deallocate in a shared section, and we avoid any cache line overlaps
-
 };
 
 struct p_autocorr_desc{
