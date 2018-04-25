@@ -139,11 +139,17 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
 
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-int maxpearson_partialauto(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, const struct qbuf& qb, const struct qstats& qs, const struct p_autocorr_desc& acd){
-   int iters = qb./qb.blockct;
+int maxpearson_partialauto(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, struct qbuf& qb, struct qstats& qs, struct p_autocorr_desc& acd){
+   // this has to be set up as a for loop due to 
+   int iters = acd.len/qb.blockct;
    int sublen = acd.sublen;
+   int iters = acd.len/qb.blockct;
+   if(iters*qb.blockct < acd.len){
+      iters++;
+   }
+   //int qct = qb.blockct;
    for(int i = 0; i < iters; i++){  // <-- this is probably wrong, I change things too frequently
-      int qct = std::min(qb.blockct,qb.querytotalct-i);
+      int qct = (i == iters - 1) ? qb.blockct : acd.len - (iters-1)*qb.blockct;
       #pragma omp parallel for
       for(int j = 0; j < qct; j++){
          int k = (i+j)*qb.blockstride;
@@ -153,7 +159,7 @@ int maxpearson_partialauto(const double* __restrict__ ts, const double* __restri
          }
       }
       #pragma omp parallel for
-      for(int j = 0; j < qb.blockct; j++){
+      for(int j = 0; j < acd.blockct; j++){
          int status = vsldCorrExecX1D(acd.covdesc[i],qb.[j*qbufstride],1,);
       }
    }
