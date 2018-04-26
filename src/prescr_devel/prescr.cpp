@@ -24,7 +24,7 @@ void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const 
 void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int count, int sublen, int qstart, int qstride, int qbufstride){
    #pragma omp parallel for
    for(int i = 0; i < count; i++){
-      int qind = qstar + i*qstride;
+      int qind = qstart + i*qstride;
       double qm = mu[qind];
       double qinvn = invn[qind];
       for(int j = 0; j < sublen; j++){
@@ -32,6 +32,17 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
       }
    }
 }
+
+void single_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int sublen){
+   #pragma omp parallel for
+      for(int j = 0; j < sublen; j++){
+         qbuf[i*qbufstride+j] = (ts[qind+j]-qm)*qinvn;
+      }
+   }
+}
+
+
+
 
 /*void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int qstart, int count, int sublen, int step){
    #pragma omp parallel for
@@ -51,13 +62,13 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
 
 // This is probably the best I can do without avx
 // I'm not completely happy with this, because it relies on updating a non-const reference
-void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double &qcov, double& qcorr, int& qind, double qinvn, int qbaseind, int offset, int count){
+void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, struct query& q, int count){
    const int unroll = 8;
    int aligned = count - count%unroll;
    for(int i = 0; i < aligned; i+= unroll){
       block<double> corr;
       for(int j = 0; j < unroll; j++){
-         corr(j) = cov[i+j]*qinvn;;
+         corr(j) = cov[i+j]*q.invn;;
       }
       for(int j = 0; j < unroll; j++){
          corr(j) = cov[i+j]*invn[i+j];
@@ -65,7 +76,7 @@ void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, 
       for(int j = 0; j < unroll; j++){
          if(xcorr[i+j] < corr(j)){
             xcorr[i+j] = corr(j);
-            cindex[i+j] = qbaseind;
+            cindex[i+j] = q.baseind;
          }
       }
       block<int> cind;
@@ -97,15 +108,15 @@ void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, 
       }
    }
    for(int i = aligned; i < offset+count; i++){
-      double corr = cov[i]*qinvn*invn[i];
-      if(qcorr < corr){
-         qcorr = corr;
-         qind =  i+offset;  
-         qcov = cov[i];
+      double corr = cov[i]*q.invn*invn[i];
+      if(q.corr < corr){
+         q.corr = corr;
+         q.ind =  i+offset;  
+         q.cov = cov[i];
       } 
       if(xcorr[i] < corr){
          xcorr[i] = corr;
-         cindex[i] = qbaseind;
+         cindex[i] = q.baseind;
       }
    }
 }
@@ -152,26 +163,36 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
 
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-int maxpearson_partialauto(struct p_autocorr& ac, struct corr_auxbuf& aux, int dlen, int qstride){
-   int rem = aux.qcount;
-   int iters = a aux.querycount/aux.q.count; 
+int maxpearson_partialauto(struct p_autocorr& ac, struct corr_auxbuf& aux, int dlen){
+   int querycount = ac.len/aux.querystride;
+   int iters = querycount/aux.q.count; 
    for(int i = 0; i < iters; i++){     
       int qct = (i == iters - 1) ? aux.q.count : aux.querycount  - (iters-1)*aux.q.count;
+      int qstart = i*aux.q.count*aux.querystride;
+
       #pragma omp parallel for
       for(int j = 0; j < aux.q.count; j++){
-         int k = (i+j)*querystride;
-         int m = mu[k];
-         double* p = aux.q(j);
-         for(int r = 0; r < sublen; r++){
-            p[r] = ts[k+r] - m;
+         double* q0 = aux.q(j);
+         int index_st = (i+j)*aux.querystride;
+         double m = ac.mu[index_st];
+         for(int k = 0; k < sublen; k++){
+            q0[k] = ac - m;
          }
       }
+
       #pragma omp parallel for
-      for(int j = 0; j < qs.blkct; j++){
+      for(int j = 0; j <  ; j++){
          for(int k = 0; k < qct; k++){
-            int status = vsldCorrExecX1D(acd.covdesc[j],qb.q[k*qb.blkstrd],1,);
+            
+            int status = vsldCorrExecX1D(ac.covdesc[j],aux.q(k),1,aux.covbufs(j));
             // need debugging info on failure
-            rescaled_max_reduct(pcorrbuf.cov+j,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset = k, count);
+
+            void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, struct query& q, int count);
+            
+            rescaled_max_reduct(aux.covbufs(j),ac.xcorr,ac.invn,ac.xind, ,count);
+            
+
+            rescaled_max_reduct(cov,xcorr,invn,cindex, &qcov, double& qcorr, int& qind, double qinvn, int qbaseind, int offset, int count){
          }
       }      
       // reduce over smaller shared buffers here?

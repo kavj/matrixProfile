@@ -25,9 +25,9 @@ struct buf_set{
    inline dtype* operator()(int i){ return i < count ? dat + i*stride : nullptr;} __attribute__((always_inline))
    
    dtype* dat;
-   int len;
-   int count;
-   int stride;
+   int blen;   
+   int bcount;
+   int bstride; 
 };
 
 
@@ -44,6 +44,10 @@ struct corr_auxbuf{
    VSLCorrTaskPtr* covtsks; // descriptor for MKL
    int querycount;   // total queries
    int querystride;  // indicates distance between queries
+   int unalsegment;  // <-- need a better name, but this would be the unaligned segment
+                     // this can be something like p_autocorr.len - blen*(bcount - 1) 
+   // for covbufs, need way to identify the fringe component. Perhaps  
+   
 };
 
 
@@ -56,7 +60,15 @@ struct p_autocorr{
    double* invn;
    double* df;
    double* dx;
-   int len;       //length of reduced cross correlation vector
+   int len;  
+   int xlen; 
 };
 
+struct query_stat{
+   double qcov;
+   double qcorr;
+   int qind;
+   double qinvn;
+   int qbaseind;
+};
 
