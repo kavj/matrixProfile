@@ -41,6 +41,15 @@ int init_taskptrs(const double* ts, int len, int blkct,int blkstride,int sublen)
 
 // this should have a constructor and destructor. It can be passed as a constant to multithreaded code sections
 struct qbuf{
+   qbuf(int qlen, int qct, alignmt){
+      blklen  = paddedlen(qlen,sizeof(double),alignmt);
+      q = init_buffer(blklen*qct,alignmt);
+      blockct = qct;
+   }
+   ~qbuf(){
+      free(q);
+   }
+
    double* q;  
    int blklen;
    int blkstrd;
@@ -70,6 +79,16 @@ struct pcorrbuf{
       qmatch = init_buffer(matchstrd*qlen,alignmt);
       
    }
+
+   ~pcorrbuff(){
+      free(qbufstrd);
+      free(matchstrd);
+      free(buffstrd);
+      free(qcov);
+      free(qcorr);
+      free(qmatch);
+   }
+
    double* qcov;             // nearest neighbor to query 
    double* qcorr;            // nearest neighbor candidates for each query
    int* qmatch;              // nearest neighbor index for each query

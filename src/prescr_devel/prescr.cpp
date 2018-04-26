@@ -7,15 +7,15 @@
 void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const double* __restrict__ mu, int len, int sublen){
    double a = 0;
    for(int i = 0; i < sublen; i++){
-      double term = ts[i] - mu[0];
-      a += term*term;
+      double t = ts[i] - mu[0];
+      a += t*t;
    }
    invn[0] = 1.0/a;
-   for(int i = sublen; i < len-sublen+1; i++){
-      double b = ts[i-sublen];
-      double c = ts[i];
-      a += ((b - mu[i-sublen]) + (c - mu[i])) * (b - c); 
-      invn[i-sublen] = 1.0/a;
+   for(int i = 1; i < len-sublen+1; i++){
+      double b = ts[i+sublen-1];
+      double c = ts[i-1];
+      a += ((b - mu[i+sublen-1]) + (c - mu[i-1])) * (b - c); 
+      invn[i-sublen+1] = sqrt(1.0/a);
    }
 }
 
@@ -38,10 +38,10 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
 
 // This is probably the best I can do without avx
 // I'm not completely happy with this, because it relies on updating a non-const reference
-void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double &qcov, double& qcorr, int& qind, int qinvn, int qbaseind, int offset, int count){
+void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double &qcov, double& qcorr, int& qind, double qinvn, int qbaseind, int offset, int count){
    const int unroll = 8;
-   int aligned = count - count%unroll + offset;
-   for(int i = offset; i < aligned; i+= unroll){
+   int aligned = count - count%unroll;
+   for(int i = 0; i < aligned; i+= unroll){
       block<double> corr;
       for(int j = 0; j < unroll; j++){
          corr(j) = cov[i+j]*qinvn;;
@@ -74,7 +74,7 @@ void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, 
       if(corr(0) < corr(4)){
          if(qcorr < corr(4)){
             qcorr = corr(4);
-            qind = i+cind(4);
+            qind = i+cind(4)+offset;
             qcov = cov[i+cind(4)];
          }
       }
@@ -87,7 +87,7 @@ void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, 
       double corr = cov[i]*qinvn*invn[i];
       if(qcorr < corr){
          qcorr = corr;
-         qind =  i;  
+         qind =  i+offset;  
          qcov = cov[i];
       } 
       if(xcorr[i] < corr){
@@ -172,8 +172,7 @@ int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autoco
          for(int k = 0; k < qb.blkct; k++){
             int status = vsldCorrExecX1D(acd.covdesc[i],qb.q[j*qb.blkstrd],1,);
             // need debugging info on failure
-            rescaled_max_reduct(pcorrbuf.qcov,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset, count){
-            // fused_max_reduce();
+            rescaled_max_reduct(pcorrbuf.qcov,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset, count);
          }
       }      
       // reduce over smaller shared buffers here?
@@ -189,4 +188,5 @@ int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autoco
 int maxpearson_partialcross(const double* __restrict a, const double* __restrict__ b, const double* __restrict__ mua, const double* __restrict__ mub, struct qbuf& qb, struct qstats& qs, struct p_whatever_desc& ccd){
 
 }
+
 
