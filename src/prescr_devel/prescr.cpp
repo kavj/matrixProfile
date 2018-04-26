@@ -139,7 +139,7 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
 
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-int maxpearson_partialauto(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, struct qbuf& qb, struct qstats& qs, struct p_autocorr_desc& acd){
+int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autocorr& acd){
    // this has to be set up as a for loop due to 
    int iters = acd.len/qb.blockct;
    int sublen = acd.sublen;
@@ -159,11 +159,12 @@ int maxpearson_partialauto(const double* __restrict__ ts, const double* __restri
          }
       }
       #pragma omp parallel for
-      for(int j = 0; j < acd.blockct; j++){
+      for(int j = 0; j < qs.blkct; j++){
          for(int k = 0; k < qb.blkct; k++){
-            int status = vsldCorrExecX1D(acd.covdesc[i],qb.[j*qbufstride],1,);
+            int status = vsldCorrExecX1D(acd.covdesc[i],qb.q[j*qb.blkstrd],1,);
             // need debugging info on failure
-           // fused_max_reduce();
+            fused_max_reduce(pcorrbuf.qcov,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset, count){
+            // fused_max_reduce();
          }
       }      
       // reduce over smaller shared buffers here?
@@ -177,7 +178,6 @@ int maxpearson_partialauto(const double* __restrict__ ts, const double* __restri
 }
 
 int maxpearson_partialcross(const double* __restrict a, const double* __restrict__ b, const double* __restrict__ mua, const double* __restrict__ mub, struct qbuf& qb, struct qstats& qs, struct p_whatever_desc& ccd){
-
 
 }
 

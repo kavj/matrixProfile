@@ -43,7 +43,7 @@ int init_taskptrs(const double* ts, int len, int blkct,int blkstride,int sublen)
 
 
 // this should have a constructor and destructor. It can be passed as a constant to multithreaded code sections
-struct qbuf_desc{
+struct qbuf{
    double* q;  
    int blklen;
    int blkstrd;
@@ -56,12 +56,12 @@ struct qbuf_desc{
  * this doesn't indicate whether qcorr is persistent. I'll deal with that later.
  * I assume yes for now unless I can discover that nothing depends on it
  */
-struct partial_corr_buf_desc{ 
-   double* qcov;              
+struct pcorrbuf{ 
+   double* qcov;             // nearest neighbor to query 
    double* qcorr;            // nearest neighbor candidates for each query
    int* qmatch;              // nearest neighbor index for each query
-   int qblkstrd;             // stride between consecutive queries
-   int qblkct;               // number of queries which may be queued
+   int qbufstrd;             // stride between consecutive query buffer instances
+   int qbufct;               // number of buffer instances per query
    int qlen;                 // query length
    VSLCorrTaskPtr* covdescs; // descriptor for MKL
    int blklen;               //untruncated length of each correlation block section
@@ -71,7 +71,7 @@ struct partial_corr_buf_desc{
 };
 
 
-struct p_ac_desc{
+struct p_autocorr{
    double* cov;
    double* xcorr;
    int* xind;
