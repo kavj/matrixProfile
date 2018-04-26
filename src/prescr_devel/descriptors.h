@@ -13,57 +13,69 @@
 
 
 
-int init(int buffercount, int bufferlen, int alignment){
-   int padding = bufferlen - (bufferlen - alignment%sizeof(double));
-   // I should sanitize input somewhere so that this can't overflow
-   if(bufferlen%alignment){
-      bufferlen += alignment;
-      bufferlen -= bufferlen%alignment;
-   }
+void* init_buffer(int bufct, int buflen, int alignmt){
+   int padding = buflen%alignment ? alignnment -  (bufferlen%alignmt) : 0;
+   buflen += alignmt;
+   void* buf;
+   posix_memalign(buf,buflen*bufct,alignmt);
+   // use posix_memalign here or something else?
+   // VC++ uses unaligned instructions anyway
    // allocate all using aligned allocator if available
    // undecided whether we should use an ad hoc one otherwise
+   return buf;
 }
+
+
+// I'll eventually build in a way to propagate errors from low level libraries to high level bindings. For now I'm mostly ignoring it.
+//
+int init_taskptrs(const double* ts, int len, int blkct,int blkstride,int sublen){
+   VSLCorrTaskPtr* covdescs = init_buffer(1,blockct*sizeof(VSLCorrTaskPtr)*blkct,sizeof(VSLCorrTaskPtr));
+   for(int i = 0; i < blockct; i++){
+      int status = vsldCorrNewTaskX1D(covdescs+i,VSL_CORR_MODE_FFT,blocklen,sublen,blocklen,ts+i*stride,1);
+      if(status != VSL_STATUS_OK){
+         // Build up real error checking once we have a less ad hoc architecture in place
+         perror("could not initialize tasks");
+         return -1; 
+      }
+   }
+   return 0;
+}
+
 
 // this should have a constructor and destructor. It can be passed as a constant to multithreaded code sections
 struct qbuf_desc{
    double* q;  
-   int blockstride;
+   int blklen;
+   int blkstrd;
    int blockct;
-   int blockstride; 
-   int bufct;
 };
 
 
-struct p_autocorrbuf_desc{  
-  double* qcov;  // covariance of optimal query match, multiple copies are used in the case of multiple queries
-   double* qcorr; // need to know this
-   int* qmatch;   // nearest neighbor index for each query
-   VSLCorrTaskPtr* covdescs;
-   int blocklen;    //length of each correlation block section
-   int blockct;
-   int blockstride; //stride with respect to correlation buffer, a stride in memory accounts for fringe portions and elements used to pad memory alignment
-   // should clean up task pointers as necessary ?
-
-   int init_taskptrs(const double* ts, int len, int blockct,int stride,int sublen){
-      covdescs = (VSLCorrTaskPtr*) mkl_malloc(blockct*sizeof(VSLCorrTaskPtr),64);
-      for(int i = 0; i < blockct; i++){
-         int status = vsldCorrNewTaskX1D(covdescs+i,VSL_CORR_MODE_FFT,blocklen,sublen,blocklen,ts+i*stride,1);
-         if(status != VSL_STATUS_OK){
-            perror("could not initialize tasks");
-            return -1; 
-         }
-      }
-      return 0;
-   }  
+/*
+ * this stores information for multiple partial correlation operations. 
+ * this doesn't indicate whether qcorr is persistent. I'll deal with that later.
+ * I assume yes for now unless I can discover that nothing depends on it
+ */
+struct partial_corr_buf_desc{ 
+   double* qcov;              
+   double* qcorr;            // nearest neighbor candidates for each query
+   int* qmatch;              // nearest neighbor index for each query
+   int qblkstrd;             // stride between consecutive queries
+   int qblkct;               // number of queries which may be queued
+   int qlen;                 // query length
+   VSLCorrTaskPtr* covdescs; // descriptor for MKL
+   int blklen;               //untruncated length of each correlation block section
+   int blkct;                //number of queries that may be buffered at any given time
+   int dstrd;                //stride between data blocks. We can't simply use buffer length, because we need to truncate edges
+   int bufstrd;              //stride between consecutive packed buffers   
 };
 
 
-struct p_autocorr_desc{
-   double* qcov;
-   int* qmatch;
+struct p_ac_desc{
    double* cov;
    double* xcorr;
    int* xind;
    int len;       //length of reduced cross correlation vector
-   int sublen;
 };
+
+

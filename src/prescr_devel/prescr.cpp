@@ -160,8 +160,13 @@ int maxpearson_partialauto(const double* __restrict__ ts, const double* __restri
       }
       #pragma omp parallel for
       for(int j = 0; j < acd.blockct; j++){
-         int status = vsldCorrExecX1D(acd.covdesc[i],qb.[j*qbufstride],1,);
-      }
+         for(int k = 0; k < qb.blkct; k++){
+            int status = vsldCorrExecX1D(acd.covdesc[i],qb.[j*qbufstride],1,);
+            // need debugging info on failure
+           // fused_max_reduce();
+         }
+      }      
+      // reduce over smaller shared buffers here?
    }
    // reduce over thread buffers
    for(int i = 0; i < ; i++){
@@ -170,5 +175,12 @@ int maxpearson_partialauto(const double* __restrict__ ts, const double* __restri
    //maxpearson_extrap_partialauto(qcov,invn,df,dx,qind, mp,mpi,count,stride,extraplen,len);
    return 0;
 }
+
+int maxpearson_partialcross(const double* __restrict a, const double* __restrict__ b, const double* __restrict__ mua, const double* __restrict__ mub, struct qbuf& qb, struct qstats& qs, struct p_whatever_desc& ccd){
+
+
+}
+
+
 
 
