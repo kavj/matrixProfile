@@ -172,7 +172,7 @@ int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autoco
          for(int k = 0; k < qct; k++){
             int status = vsldCorrExecX1D(acd.covdesc[j],qb.q[k*qb.blkstrd],1,);
             // need debugging info on failure
-            rescaled_max_reduct(pcorrbuf.cov+k,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset, count);
+            rescaled_max_reduct(pcorrbuf.cov+j,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset = k, count);
          }
       }      
       // reduce over smaller shared buffers here?
