@@ -38,7 +38,7 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
 
 // This is probably the best I can do without avx
 // I'm not completely happy with this, because it relies on updating a non-const reference
-void fused_max_reduce(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double &qcov, double& qcorr, int& qind, int qinvn, int qbaseind, int offset, int count){
+void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double &qcov, double& qcorr, int& qind, int qinvn, int qbaseind, int offset, int count){
    const int unroll = 8;
    int aligned = count - count%unroll + offset;
    for(int i = offset; i < aligned; i+= unroll){
@@ -138,6 +138,15 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
 }
 
 
+void init_maxpearson(double* ts, int len, int sublen){
+   struct pcorrbuf pcb;
+   struct p_autocorr ac;
+   struct qbuf q;
+   
+
+}
+
+
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
 int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autocorr& acd){
    // this has to be set up as a for loop due to 
@@ -163,7 +172,7 @@ int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autoco
          for(int k = 0; k < qb.blkct; k++){
             int status = vsldCorrExecX1D(acd.covdesc[i],qb.q[j*qb.blkstrd],1,);
             // need debugging info on failure
-            fused_max_reduce(pcorrbuf.qcov,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset, count){
+            rescaled_max_reduct(pcorrbuf.qcov,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset, count){
             // fused_max_reduce();
          }
       }      
@@ -180,7 +189,4 @@ int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autoco
 int maxpearson_partialcross(const double* __restrict a, const double* __restrict__ b, const double* __restrict__ mua, const double* __restrict__ mub, struct qbuf& qb, struct qstats& qs, struct p_whatever_desc& ccd){
 
 }
-
-
-
 

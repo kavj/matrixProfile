@@ -11,20 +11,17 @@
 // The third structure contains all persistent arrays. These are maintained using subdivided access. Note how qcorr isn't needed there. It's because the intended access pattern is to access normalized queries once, process over all buffers, then discard. 
 // It would be possible to add an extrapolation pass prior to the next parallel section, thus removing qcov and qmatch completely. It depends on the performance impact. Matches might be scattered in memory, while the queries are somewhat localized due to striding.
 
-
-
-void* init_buffer(int bufct, int buflen, int alignmt){
-   int padding = buflen%alignment ? alignnment -  (bufferlen%alignmt) : 0;
-   buflen += alignmt;
-   void* buf;
-   posix_memalign(buf,buflen*bufct,alignmt);
-   // use posix_memalign here or something else?
-   // VC++ uses unaligned instructions anyway
-   // allocate all using aligned allocator if available
-   // undecided whether we should use an ad hoc one otherwise
-   return buf;
+static inline int paddedlen(int buflen, int unitsz, int alignmt){
+   return  (buflen*unitsz) + (buflen*unitsz)%alignment ? alignnment - (bufferlen*unitsz)%alignmt : 0;
 }
 
+// standardized in case we want to use different allocators
+
+void* init_buffer(int bufsz, int alignmt){
+   void* buf;
+   posix_memalign(buf,buflen*bufct,alignmt);
+   return buf;
+}
 
 // I'll eventually build in a way to propagate errors from low level libraries to high level bindings. For now I'm mostly ignoring it.
 //
@@ -55,15 +52,32 @@ struct qbuf{
  * this stores information for multiple partial correlation operations. 
  * this doesn't indicate whether qcorr is persistent. I'll deal with that later.
  * I assume yes for now unless I can discover that nothing depends on it
+ *
+ *
+ * This needs so much cleanup git --facedesk
+ * The objects should be able to initialize memory structures. I might change this to use lazy instantiation later, but for now it should at least be a bit cleaner
  */
+//template<typename dtype>
 struct pcorrbuf{ 
+   pcorrbuf(int dct, int dbufl, int qct, int ql, int alignmt){
+      qlen = ql;
+      dct = dbufl;
+      qbufstrd = paddedlen(ql,sizeof(double),alignmt);
+      matchstrd = paddedlen(ql,sizeof(int),alignmt);
+      bufstrd = paddedlen(dbufl,sizeof(double),alignmt);
+      qcov = init_buffer(qbufstrd*qlen,alignmt);
+      qcorr = init_buffer(qbufstrd*qlen,alignmt);
+      qmatch = init_buffer(matchstrd*qlen,alignmt);
+      
+   }
    double* qcov;             // nearest neighbor to query 
    double* qcorr;            // nearest neighbor candidates for each query
    int* qmatch;              // nearest neighbor index for each query
+   VSLCorrTaskPtr* covdescs; // descriptor for MKL
+   int matchstrd;
    int qbufstrd;             // stride between consecutive query buffer instances
    int qbufct;               // number of buffer instances per query
    int qlen;                 // query length
-   VSLCorrTaskPtr* covdescs; // descriptor for MKL
    int blklen;               //untruncated length of each correlation block section
    int blkct;                //number of queries that may be buffered at any given time
    int dstrd;                //stride between data blocks. We can't simply use buffer length, because we need to truncate edges
@@ -74,7 +88,11 @@ struct pcorrbuf{
 struct p_autocorr{
    double* cov;
    double* xcorr;
-   int* xind;
+   int* xind;  
+   double* mu;
+   double* invn;
+   double* df;
+   double* dx;
    int len;       //length of reduced cross correlation vector
 };
 
