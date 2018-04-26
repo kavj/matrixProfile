@@ -169,10 +169,10 @@ int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autoco
       }
       #pragma omp parallel for
       for(int j = 0; j < qs.blkct; j++){
-         for(int k = 0; k < qb.blkct; k++){
-            int status = vsldCorrExecX1D(acd.covdesc[i],qb.q[j*qb.blkstrd],1,);
+         for(int k = 0; k < qct; k++){
+            int status = vsldCorrExecX1D(acd.covdesc[j],qb.q[k*qb.blkstrd],1,);
             // need debugging info on failure
-            rescaled_max_reduct(pcorrbuf.qcov,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset, count);
+            rescaled_max_reduct(pcorrbuf.cov+k,acd.xcorr,invn,cindex,qcov, qcorr, qind, qinvn, qbaseind, offset, count);
          }
       }      
       // reduce over smaller shared buffers here?
@@ -185,8 +185,5 @@ int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autoco
    return 0;
 }
 
-int maxpearson_partialcross(const double* __restrict a, const double* __restrict__ b, const double* __restrict__ mua, const double* __restrict__ mub, struct qbuf& qb, struct qstats& qs, struct p_whatever_desc& ccd){
-
-}
 
 
