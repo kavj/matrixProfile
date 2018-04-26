@@ -20,7 +20,20 @@ void fast_invcn(double* __restrict__ invn, const double* __restrict__ ts, const 
 }
 
 // mmay not be needed
-void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int qstart, int count, int sublen, int step){
+
+void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int count, int sublen, int qstart, int qstride, int qbufstride){
+   #pragma omp parallel for
+   for(int i = 0; i < count; i++){
+      int qind = qstar + i*qstride;
+      double qm = mu[qind];
+      double qinvn = invn[qind];
+      for(int j = 0; j < sublen; j++){
+         qbuf[i*qbufstride+j] = (ts[qind+j]-qm)*qinvn;
+      }
+   }
+}
+
+/*void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int qstart, int count, int sublen, int step){
    #pragma omp parallel for
    for(int i = 0; i < count; i++){
       int qind = i*sublen;
@@ -33,7 +46,7 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
          ++tsind;
       }
    }
-}
+}*/
 
 
 // This is probably the best I can do without avx
@@ -138,33 +151,19 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
 }
 
 
-void init_maxpearson(double* ts, int len, int sublen){
-   struct pcorrbuf pcb;
-   struct p_autocorr ac;
-   struct qbuf q;
-   
-
-}
-
-
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-int maxpearson_partialauto(struct qbuf& qb, struct pcorrbuf& qs, struct p_autocorr& acd){
-   // this has to be set up as a for loop due to 
-   int iters = acd.len/qb.blockct;
-   int sublen = acd.sublen;
-   int iters = acd.len/qb.blockct;
-   if(iters*qb.blockct < acd.len){
-      iters++;
-   }
-   //int qct = qb.blockct;
-   for(int i = 0; i < iters; i++){  // <-- this is probably wrong, I change things too frequently
-      int qct = (i == iters - 1) ? qb.blockct : acd.len - (iters-1)*qb.blockct;
+int maxpearson_partialauto(struct p_autocorr& ac, struct corr_auxbuf& aux, int dlen, int qstride){
+   int rem = aux.qcount;
+   int iters = a aux.querycount/aux.q.count; 
+   for(int i = 0; i < iters; i++){     
+      int qct = (i == iters - 1) ? aux.q.count : aux.querycount  - (iters-1)*aux.q.count;
       #pragma omp parallel for
-      for(int j = 0; j < qct; j++){
-         int k = (i+j)*qb.blockstride;
+      for(int j = 0; j < aux.q.count; j++){
+         int k = (i+j)*querystride;
          int m = mu[k];
-         for(int p = 0; p < sublen; p++){
-            qb.q[p] = ts[p+k] - m;
+         double* p = aux.q(j);
+         for(int r = 0; r < sublen; r++){
+            p[r] = ts[k+r] - m;
          }
       }
       #pragma omp parallel for
