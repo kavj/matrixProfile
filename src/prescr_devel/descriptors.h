@@ -25,15 +25,24 @@ void* init_buffer(int bufsz, int alignmt){
 
 // I'll eventually build in a way to propagate errors from low level libraries to high level bindings. For now I'm mostly ignoring it.
 //
-int init_taskptrs(const double* ts, int len, int blkct,int blkstride,int sublen){
-   VSLCorrTaskPtr* covdescs = init_buffer(1,blockct*sizeof(VSLCorrTaskPtr)*blkct,sizeof(VSLCorrTaskPtr));
+VSLCorrTaskPtr* init_taskptrs(const double* ts, int len, int blkct,int blkstride,int sublen){
+   VSLCorrTaskPtr* covtsks = init_buffer(1,blockct*sizeof(VSLCorrTaskPtr)*blkct,sizeof(VSLCorrTaskPtr));
    for(int i = 0; i < blockct; i++){
-      int status = vsldCorrNewTaskX1D(covdescs+i,VSL_CORR_MODE_FFT,blocklen,sublen,blocklen,ts+i*stride,1);
+      int status = vsldCorrNewTaskX1D(covtsks+i,VSL_CORR_MODE_FFT,blocklen,sublen,blocklen,ts+i*stride,1);
       if(status != VSL_STATUS_OK){
          // Build up real error checking once we have a less ad hoc architecture in place
          perror("could not initialize tasks");
          return -1; 
       }
+   }
+   return covtsks;
+}
+
+int dest_taskptrs(VSLCorrTaskPtr* covtsks, int blkct){
+   for(int i = 0; i < blockct; i++){
+     //check this part
+     // int status = vsldCorr
+     //
    }
    return 0;
 }
@@ -77,7 +86,7 @@ struct pcorrbuf{
       qcov = init_buffer(qbufstrd*qlen,alignmt);
       qcorr = init_buffer(qbufstrd*qlen,alignmt);
       qmatch = init_buffer(matchstrd*qlen,alignmt);
-      
+      covtsks = nullptr; 
    }
 
    ~pcorrbuff(){
@@ -87,12 +96,13 @@ struct pcorrbuf{
       free(qcov);
       free(qcorr);
       free(qmatch);
+      /// delete taskptrs
    }
 
    double* qcov;             // nearest neighbor to query 
    double* qcorr;            // nearest neighbor candidates for each query
    int* qmatch;              // nearest neighbor index for each query
-   VSLCorrTaskPtr* covdescs; // descriptor for MKL
+   VSLCorrTaskPtr* covtsks; // descriptor for MKL
    int matchstrd;
    int qbufstrd;             // stride between consecutive query buffer instances
    int qbufct;               // number of buffer instances per query
@@ -100,7 +110,7 @@ struct pcorrbuf{
    int blklen;               //untruncated length of each correlation block section
    int blkct;                //number of queries that may be buffered at any given time
    int dstrd;                //stride between data blocks. We can't simply use buffer length, because we need to truncate edges
-   int bufstrd;              //stride between consecutive packed buffers   
+   int dbufstrd;              //stride between consecutive packed buffers   
 };
 
 
