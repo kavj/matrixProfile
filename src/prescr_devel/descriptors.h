@@ -47,10 +47,32 @@ int dest_taskptrs(VSLCorrTaskPtr* covtsks, int blkct){
    return 0;
 }
 
+template<typename dtype>
+struct buf_set{
+   buf_set(int blocklen, int blockcount, int alignmt){
+      count = blockcount;
+      len = paddedlen(blocklen,sizeof(dtype),alignmt);
+      dat = init_buffer(len*count,alignmt);
+   }
+   ~buf_set(){
+      free(dat);
+   }
+   
+   inline dtype* operator()(int i) __attribute((always_inline))__;
+
+   inline dtype* operator()(int i){ return i < count ? dat + i*stride : nullptr;}
+
+   dtype* dat;
+   int len;
+   int count;
+   int stride;
+};
+
 
 // this should have a constructor and destructor. It can be passed as a constant to multithreaded code sections
 struct qbuf{
    qbuf(int qlen, int qct, alignmt){
+      
       blklen  = paddedlen(qlen,sizeof(double),alignmt);
       q = init_buffer(blklen*qct,alignmt);
       blockct = qct;
@@ -58,7 +80,7 @@ struct qbuf{
    ~qbuf(){
       free(q);
    }
-
+   double* gq(int i){ return i < qct ? q + i*blkstrd : nullptr;}
    double* q;  
    int blklen;
    int blkstrd;
@@ -98,6 +120,13 @@ struct pcorrbuf{
       free(qmatch);
       /// delete taskptrs
    }
+
+   // let's see if the compiler can inline this
+
+   inline double gqcov(int i){ return    i < qbufct ? qcov    + i*qbufstrd  : nullptr; }
+   inline double gqcorr(int i){ return   i < qbufct ? qcorr   + i*qbufstrd  : nullptr; }
+   inline double gcovtsks(int i){ return i < qbufct ? covtsks + i           : nullptr; }
+   inline double gqmatch(int i){ return  i < qbufct ? qcov    + i*matchstrd : nullptr; }
 
    double* qcov;             // nearest neighbor to query 
    double* qcorr;            // nearest neighbor candidates for each query
