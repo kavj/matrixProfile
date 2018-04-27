@@ -62,6 +62,8 @@ void single_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts,
 
 // This is probably the best I can do without avx
 // I'm not completely happy with this, because it relies on updating a non-const reference
+
+struct query_stat rescaled_max_reduct(double* __restrict__ cov, double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, int qbaseind, int cindoffset, int count);
 void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, struct query& q, int count){
    const int unroll = 8;
    int aligned = count - count%unroll;
@@ -164,10 +166,10 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
 
 // if it's not parallel, we allocate fewer buffers assume parallel for interactivity
 int maxpearson_partialauto(struct p_autocorr& ac, struct corr_auxbuf& aux, int dlen){
-   int querycount = ac.len/aux.querystride;
-   int iters = querycount/aux.q.count; 
+   int iters = aux.iters();
+   int alias_offset = aux.q.blen-1;  // truncate edge terms of cross correlation
    for(int i = 0; i < iters; i++){     
-      int qct = (i == iters - 1) ? aux.querycount : aux.tailcount;
+      int qct = (i == iters - 1) ? aux.q.bcount : aux.tailcount;
       #pragma omp parallel for
       for(int j = 0; j < aux.q.count; j++){
          double* q0 = aux.q(j);
@@ -177,15 +179,14 @@ int maxpearson_partialauto(struct p_autocorr& ac, struct corr_auxbuf& aux, int d
             q0[k] = ac.ts[index_st+k] - m;
          }
       }
-
       #pragma omp parallel for
       for(int j = 0; j <  ; j++){
          for(int k = 0; k < qct; k++){
-            
-       //    int status = vsldCorrExecX1D(ac.covdesc[j],aux.q(k),1,aux.covbufs(j));
-       //     void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, struct query& q, int count);
-       //     rescaled_max_reduct(aux.covbufs(j),ac.xcorr,ac.invn,ac.xind, ,count);
-       //     rescaled_max_reduct(cov,xcorr,invn,cindex, &qcov, double& qcorr, int& qind, double qinvn, int qbaseind, int offset, int count)
+            int status = vsldCorrExecX1D(ac.covdesc[j],aux.q(k),1,aux.covbufs(j));
+            int qbaseind = (j*aux.q.bcount + k)*aux.qbasestride;
+            int cindoffset = 
+            rescaled_max_reduct(aux.qcov(j)+ alias_offset,ac.xcorr+ac.offset(j),ac.invn+offset(j),ac.xind(j),ac.invn[blk(0)+qbaseind],qbaseind,);
+            struct query_stat rescaled_max_reduct(double* __restrict__ cov, double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, double qinvn, int qbaseind, int cindoffset, int count);
          }
       }      
       // reduce over smaller shared buffers here?
