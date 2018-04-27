@@ -167,26 +167,25 @@ int maxpearson_partialauto(struct p_autocorr& ac, struct corr_auxbuf& aux, int d
    int querycount = ac.len/aux.querystride;
    int iters = querycount/aux.q.count; 
    for(int i = 0; i < iters; i++){     
-      int qct = (i == iters - 1) ? aux.q.count : aux.querycount  - (iters-1)*aux.q.count;
-      int qstart = i*aux.q.count*aux.querystride;
-
+      int qct = (i == iters - 1) ? aux.querycount : aux.tailcount;
       #pragma omp parallel for
       for(int j = 0; j < aux.q.count; j++){
          double* q0 = aux.q(j);
-         int index_st = (i+j)*aux.querystride;
+         int index_st = (i+j)*aux.qbasestride;
          double m = ac.mu[index_st];
          for(int k = 0; k < sublen; k++){
-            q0[k] = ac - m;
+            q0[k] = ac.ts[index_st+k] - m;
          }
       }
 
       #pragma omp parallel for
       for(int j = 0; j <  ; j++){
          for(int k = 0; k < qct; k++){
-            int status = vsldCorrExecX1D(ac.covdesc[j],aux.q(k),1,aux.covbufs(j));
-            void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, struct query& q, int count);
-            rescaled_max_reduct(aux.covbufs(j),ac.xcorr,ac.invn,ac.xind, ,count);
-            rescaled_max_reduct(cov,xcorr,invn,cindex, &qcov, double& qcorr, int& qind, double qinvn, int qbaseind, int offset, int count)
+            
+       //    int status = vsldCorrExecX1D(ac.covdesc[j],aux.q(k),1,aux.covbufs(j));
+       //     void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, struct query& q, int count);
+       //     rescaled_max_reduct(aux.covbufs(j),ac.xcorr,ac.invn,ac.xind, ,count);
+       //     rescaled_max_reduct(cov,xcorr,invn,cindex, &qcov, double& qcorr, int& qind, double qinvn, int qbaseind, int offset, int count)
          }
       }      
       // reduce over smaller shared buffers here?
@@ -198,6 +197,5 @@ int maxpearson_partialauto(struct p_autocorr& ac, struct corr_auxbuf& aux, int d
    //maxpearson_extrap_partialauto(qcov,invn,df,dx,qind, mp,mpi,count,stride,extraplen,len);
    return 0;
 }
-
 
 
