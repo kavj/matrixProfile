@@ -183,16 +183,10 @@ int maxpearson_partialauto(struct p_autocorr& ac, struct corr_auxbuf& aux, int d
       #pragma omp parallel for
       for(int j = 0; j <  ; j++){
          for(int k = 0; k < qct; k++){
-            
             int status = vsldCorrExecX1D(ac.covdesc[j],aux.q(k),1,aux.covbufs(j));
-            // need debugging info on failure
-
             void rescaled_max_reduct(double* __restrict__ cov,  double* __restrict__ xcorr, const double* __restrict__ invn, int* __restrict__ cindex, struct query& q, int count);
-            
             rescaled_max_reduct(aux.covbufs(j),ac.xcorr,ac.invn,ac.xind, ,count);
-            
-
-            rescaled_max_reduct(cov,xcorr,invn,cindex, &qcov, double& qcorr, int& qind, double qinvn, int qbaseind, int offset, int count){
+            rescaled_max_reduct(cov,xcorr,invn,cindex, &qcov, double& qcorr, int& qind, double qinvn, int qbaseind, int offset, int count)
          }
       }      
       // reduce over smaller shared buffers here?
