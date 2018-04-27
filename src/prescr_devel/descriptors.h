@@ -3,11 +3,10 @@
 #include "alloc.h"
 #include "mkl.h"
 
+// This should probably be temporary. Since I end up having to distribute stuff frequently, it would be a good idea to generalize the striding somewhat for 1 and 2D strides
 
-//  This assumes we want to subdivide some 1D array of 
-static inline int paddedlen(int buflen, int unitsz, int alignmt){
-   return  (buflen*unitsz) + (buflen*unitsz)%alignment ? alignnment - (bufferlen*unitsz)%alignmt : 0;
-}
+
+static inline int paddedlen(int buflen, int unitsz, int alignmt){ return  (buflen*unitsz) + ((buflen*unitsz)%alignment ? alignnment - (bufferlen*unitsz)%alignmt : 0); } __attribute__((always_inline))
 
 template<typename dtype>
 struct twod_buf{
@@ -35,7 +34,7 @@ struct twod_buf{
 
 //template<typename dtype>
 struct corr_auxbuf{ 
-   corr_auxbuf(int querylen, int qbufct, int qstatslen, int qstatsbufct, int databuflen, int databufct,  int alignmt){
+   corr_auxbuf(int qlen, int qbufct, int qstatslen, int qstatsbufct, int databuflen, int databufct,  int alignmt){
       
    }
    struct twod_buf<double> q;
@@ -46,8 +45,8 @@ struct corr_auxbuf{
    VSLCorrTaskPtr* covtsks; // descriptor for MKL
    int querycount;   // total queries
    int qbasestride;  // indicates distance between queries with respect to a time series, can be set to -1 if these are not uniformly sampled 
-   int unalsegment;  // <-- need a better name, but this would be the unaligned segment
-                       // this can be something like p_autocorr.len - blen*(bcount - 1) 
+   int tailcount;  // <-- need a better name, but this would be the unaligned segment
+                       // this is REM(length(time_series)/length(buffer))
    // for covbufs, need way to identify the fringe component. Perhaps  
    inline int isinitialized(){return (q.dat != nullptr) && (qcov.dat != nullptr) && (qcorr.dat != nullptr) && (covbufs.dat != nullptr) && (qmatch.dat != nullptr);} __attribute__((always_inline))
    
@@ -70,8 +69,15 @@ struct p_autocorr{
    double* dx;
    int len;  
    int xlen; 
-   
-   inline int isinitialized(){return (q.dat != nullptr) && (qcov.dat != nullptr) && (qcorr.dat != nullptr) && (covbufs.dat != nullptr) && (qmatch.dat != nullptr);} __attribute__((always_inline))
+   int bstride;
+   int bcount;
+   int blen;
+   int taillen;
+   // Todo: the resource handle stuff should be much more opaque or it might cause problems later. This is fine for now given that strides are uniform. It is important to note that sections might overlap here on read only memory
+   // due to the use of overlap and save style filtering
+
+   inline int operator()(int i){ return i < bcount ? i*bstride : nullptr; } __attribute__((always_inline))
+   inline int isinitialized(){return (ts != nullptr) && (cov != nullptr) && (xcorr != nullptr) && (xind != nullptr) && (mu != nullptr)  && (inv != nullptr) && (df != nullptr) && (dx != nullptr); } __attribute__((always_inline))
 
 };
 
