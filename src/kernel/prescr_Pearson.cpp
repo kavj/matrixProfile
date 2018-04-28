@@ -20,21 +20,6 @@ void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, 
 }
 
 
-/*void batch_normalize(double* __restrict__ qbuf,  const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ invn, int qstart, int count, int sublen, int step){
-   #pragma omp parallel for
-   for(int i = 0; i < count; i++){
-      int qind = i*sublen;
-      int tsind = i*step+qstart;
-      double qm = mu[qind];
-      double qinvn = invn[qind];
-      for(int j = 0; j < sublen; j++){
-         qbuf[qind] = (ts[tsind]-qm)*qinvn;
-         ++qind;
-         ++tsind;
-      }
-   }
-}*/
-
 
 // This is probably the best I can do without avx
 // I'm not completely happy with this, because it relies on updating a non-const reference
@@ -147,39 +132,5 @@ void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restri
    }
 }
 
-
-// if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-int maxpearson_partialauto(struct acorr_desc& aux){
-   // int iters = aux.required_passes();
-   int alias_offset = aux.q.blen-1;  // truncate edge terms of cross correlation
-   for(int i = 0; i < iters; i++){     
-      int qct = (i == iters - 1) ? aux.q.bcount : aux.tailcount;
-      #pragma omp parallel for
-      for(int j = 0; j < aux.q.count; j++){
-         double* query = aux.q(j);
-         int index_st = (i+j)*aux.qbasestride;
-         double m = ac.mu[index_st];
-         for(int k = 0; k < sublen; k++){
-            q0[k] = ac.ts[index_st+k] - m;
-         }
-      }
-      #pragma omp parallel for
-      for(int j = 0; j <  ; j++){
-         for(int k = 0; k < qct; k++){
-            int status = vsldCorrExecX1D(ac.covdesc[j],aux.q(k),1,aux.covbufs(j));
-            int qbaseind = (j*aux.q.bcount + k)*aux.qbasestride;
-            //int cindoffset =  
-            rescaled_max_reduct(aux.qcov(j)+ alias_offset,ac.xcorr+ac.offset(j),ac.invn+offset(j),ac.xind(j),ac.invn[blk(0)+qbaseind],qbaseind,);
-         }
-      }      
-      // reduce over smaller shared buffers here?
-   }
-   // reduce over thread buffers
-   for(int i = 0; i < ; i++){
-      
-   }
-   //maxpearson_extrap_partialauto(qcov,invn,df,dx,qind, mp,mpi,count,stride,extraplen,len);
-   return 0;
-}
 
 

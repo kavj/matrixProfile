@@ -13,33 +13,49 @@ template<typename dtype> struct buf_strided{
    buf_strided(int blklen, int blkcount, int alignmt) : bcount(blkcount), blen(blklen), bstride(paddedlen(blklen,sizeof(dtype),alignmt)), dat(nullptr){}
  
    ~buf_strided(){
-      free(dat);
+      if(ownsmem){
+         free(dat);
+      }
    }
    inline dtype*  __attribute__((always_inline)) operator()(int i){ return i < bcount ? dat + i*bstride : nullptr;}
    dtype* dat;
    int blen;   
    int bcount;
    int bstride; 
+   private:
+   bool ownsmem;
 };
 
 
 
 // indexed and continuous subdivision
 template<typename dtype>
-struct buf_indexed{
-   buf_indexed() : dat(nullptr), len(0), blen(0), bstride(0){}
-   buf_indexed(dtype* dat, int len, int blocklen) : dat(dat), len(len), blen(blocklen){}
+struct buf_overlapped{
+   buf_overlapped() : dat(nullptr), len(0), blen(0), bstride(0){}
+   buf_overlapped(dtype* dat, int len, int blocklen) : dat(dat), len(len), blen(blocklen){}
+   ~buf_overlapped(){
+      if(ownsmem){
+         dtype* dat;
+      }
+   }
    dtype* dat;
    int len;
    int blen;
    int bstride;
+   private:
+   bool ownsmem;
 };
 
 
-//template<typename dtype>
+
+
+// I'm a little conflicted on this part. The custom accessors are probably sufficient for now, but this might not be scalable compared to a more sophisticated buffer interface
+// There's also the issue of memory lifetime. In cases where memory is externally allocated and deallocated, we need to avoid deallocation by the destructor
+//
+
 template<typename dtype>
-struct corr_auxbuf{ 
-   corr_auxbuf(int qlen, int qbufct, int qstatslen, int qstatsbufct, int databuflen, int databufct,  int alignmt) {}//: //ts(nullptr), cov(nullptr), xcorr(nullptr), xind(nullptr), mu(nullptr), invn(nullptr), df(nullptr), dx(nullptr), q(nullptr), 
+struct acorr_desc{ 
+  acorr_desc(int qlen, int qbufct, int qstatslen, int qstatsbufct, int databuflen, int databufct,  int alignmt) {}//: //ts(nullptr), cov(nullptr), xcorr(nullptr), xind(nullptr), mu(nullptr), invn(nullptr), df(nullptr), dx(nullptr), q(nullptr), 
                                                                                                                     //qcov(nullptr), qcorr(nullptr), covbufs(nullptr), qmatch(nullptr), covtsks(nullptr){}
    dtype* ts;
    dtype* cov;
@@ -48,7 +64,7 @@ struct corr_auxbuf{
    dtype* mu;
    dtype* invn;
    dtype* df;
-   dtype* dx;;
+   dtype* dx;
 
    struct buf_strided<double> q;
    struct buf_strided<double> qcov;
@@ -58,30 +74,36 @@ struct corr_auxbuf{
    VSLCorrTaskPtr* covtsks; // descriptor for MKL
    int querycount;   // total queries required
    int qbasestride;  // indicates distance between queries with respect to a time series. This is used in indexing queries
-   int tailcount;   // this is just however many queries  
-                   // this is REM(length(time_series)/length(buffer))
-                   // for covbufs, need way to identify the fringe component. Perhaps  
+   int taillen;
+   int tailqcount;   // this is just however many queries  
+   int xcorrlen;
+   int sublen;
+   int bcount;
+   int blen;
+   int bstride;    // normal block stride
 
-   inline dtype*  __attribute__((always_inline)) gts   (int i) { return i < bcount ? ts    + i*bstride : nullptr;}
-   inline dtype*  __attribute__((always_inline)) gcov  (int i) { return i < bcount ? cov   + i*bstride : nullptr;}
-   inline dtype*  __attribute__((always_inline)) gxcorr(int i) { return i < bcount ? xcorr + i*bstride : nullptr;}
-   inline dtype*  __attribute__((always_inline)) gxind (int i) { return i < bcount ? xind  + i*bstride : nullptr;}
-   inline dtype*  __attribute__((always_inline)) gmu   (int i) { return i < bcount ? mu    + i*bstride : nullptr;}
-   inline dtype*  __attribute__((always_inline)) ginvn (int i) { return i < bcount ? invn  + i*bstride : nullptr;}
-   inline dtype*  __attribute__((always_inline)) gdf   (int i) { return i < bcount ? df    + i*bstride : nullptr;}
-   inline dtype*  __attribute__((always_inline)) gdx   (int i) { return i < bcount ? dx    + i*bstride : nullptr;}
+   // This allows for slightly more arbitrary indexing with a bounds check on the first point.
+   
+
+   inline dtype*  __attribute__((always_inline)) sts   (int i, int stride) { return (i*stride) < xcorrlen+sublen-1 ? ts   + i*stride : nullptr;} 
+   inline dtype*  __attribute__((always_inline)) scov  (int i, int stride) { return (i*stride) < xcorrlen ? cov  + i*stride : nullptr;}
+   inline dtype*  __attribute__((always_inline)) sxcorr(int i, int stride) { return (i*stride) < xcorrlen ? xcorr+ i*stride : nullptr;}
+   inline dtype*  __attribute__((always_inline)) sxind (int i, int stride) { return (i*stride) < xcorrlen ? xind + i*stride : nullptr;}
+   inline dtype*  __attribute__((always_inline)) smu   (int i, int stride) { return (i*stride) < xcorrlen ? mu   + i*stride : nullptr;}
+   inline dtype*  __attribute__((always_inline)) sinvn (int i, int stride) { return (i*stride) < xcorrlen ? invn + i*stride : nullptr;}
+   inline dtype*  __attribute__((always_inline)) sdf   (int i, int stride) { return (i*stride) < xcorrlen ? df   + i*stride : nullptr;}
+   inline dtype*  __attribute__((always_inline)) sdx   (int i, int stride) { return (i*stride) < xcorrlen ? dx   + i*stride : nullptr;}
+
+
    
    inline int __attribute__((always_inline)) isinitialized(){return (q.dat != nullptr) && (qcov.dat != nullptr) && (qcorr.dat != nullptr) && (covbufs.dat != nullptr) && (qmatch.dat != nullptr);} 
    inline int __attribute__((always_inline)) required_passes(){return (q.bcount/querycount) + ((q.bcount%querycount) ? 1 : 0);} 
 
-  //  Ultimately need to be able to do something like reduce remaining from length(data) to 0 somewhere. 
-  //  inline double  __attribute__((always_inline)) operator()(int i){ return i < bcount ? i*bstride : -1; }
-  //  inline int   __attribute__((always_inline)) isinitialized(){return (ts != nullptr) && (cov != nullptr) && (xcorr != nullptr) && (xind != nullptr) && (mu != nullptr)  && (invn != nullptr) && (df != nullptr) && (dx != nullptr); } 
- 
 };
 
 
 struct query_stat{
+   query_stat(double qcov, int qind) : qcov(qcov), qind(qind){}
    double qcov;
    int qind;
 };
