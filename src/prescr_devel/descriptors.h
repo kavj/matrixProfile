@@ -9,10 +9,10 @@
 static inline int   __attribute__((always_inline)) paddedlen(int buflen, int unitsz, int alignmt){ return  (buflen*unitsz) + ((buflen*unitsz)%alignmt ? alignmt - (buflen*unitsz)%alignmt : 0);}
 
 template<typename dtype> struct buf_strided{
-   buf_strided();
-   buf_strided(int blklen, int blkcount, int alignmt) : bcount(blkcount), blen(blklen), bstride(paddedlen(blklen,sizeof(dtype),alignmt)), dat(nullptr){}
+   inline __attribute__((always_inline)) buf_strided(){}
+   inline __attribute__((always_inline)) buf_strided(int blklen, int blkcount, int alignmt) : bcount(blkcount), blen(blklen), bstride(paddedlen(blklen,sizeof(dtype),alignmt)), dat(nullptr){}
  
-   ~buf_strided(){
+   inline __attribute__((always_inline)) ~buf_strided(){
       if(ownsmem){
          free(dat);
       }
@@ -31,7 +31,7 @@ template<typename dtype> struct buf_strided{
 // indexed and continuous subdivision
 template<typename dtype>
 struct buf_overlapped{
-   buf_overlapped() : dat(nullptr), len(0), blen(0), bstride(0){}
+   inline __attribute__((always_inline)) buf_overlapped() : dat(nullptr), len(0), blen(0), bstride(0){}
    buf_overlapped(dtype* dat, int len, int blocklen) : dat(dat), len(len), blen(blocklen){}
    ~buf_overlapped(){
       if(ownsmem){
@@ -55,7 +55,7 @@ struct buf_overlapped{
 
 template<typename dtype>
 struct acorr_desc{ 
-  acorr_desc(int qlen, int qbufct, int qstatslen, int qstatsbufct, int databuflen, int databufct,  int alignmt) {}//: //ts(nullptr), cov(nullptr), xcorr(nullptr), xind(nullptr), mu(nullptr), invn(nullptr), df(nullptr), dx(nullptr), q(nullptr), 
+  inline __attribute__((always_inline)) acorr_desc(int qlen, int qbufct, int qstatslen, int qstatsbufct, int databuflen, int databufct,  int alignmt) {}//: //ts(nullptr), cov(nullptr), xcorr(nullptr), xind(nullptr), mu(nullptr), invn(nullptr), df(nullptr), dx(nullptr), q(nullptr), 
                                                                                                                     //qcov(nullptr), qcorr(nullptr), covbufs(nullptr), qmatch(nullptr), covtsks(nullptr){}
    dtype* ts;
    dtype* cov;
@@ -83,7 +83,7 @@ struct acorr_desc{
    int bstride;    // normal block stride
 
    // This allows for slightly more arbitrary indexing with a bounds check on the first point.
-   
+   // I am still somewhat undecided. The code itself might be better if I simply used structs to impl
 
    inline dtype*  __attribute__((always_inline)) sts   (int i, int stride) { return (i*stride) < xcorrlen+sublen-1 ? ts   + i*stride : nullptr;} 
    inline dtype*  __attribute__((always_inline)) scov  (int i, int stride) { return (i*stride) < xcorrlen ? cov  + i*stride : nullptr;}
