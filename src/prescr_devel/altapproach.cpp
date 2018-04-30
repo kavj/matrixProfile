@@ -46,6 +46,58 @@ void  bleh(double* __restrict__ cov, const double* __restrict__ df, const double
 }*/
 
 
+struct rpair {  __m256d val; __m256i index;};
+
+
+// AVX2 has 16 register names
+
+static inline struct rpair __attribute__((always_inline)) reduce(const __m256d& r0, const __m256d& r1, const __m256d& r2, const __m256d& r3,  const __m256d& r4, const __m256d& r5, const __m256d& r6, const __m256d& r7){
+   block<__m256i> mask;
+   mask(1) = r0 > r1;
+   mask(2) = r2 > r3;
+   mask(3) = r4 > r5;
+   mask(4) = r6 > r7;
+   block<__m256d> vals;
+   static const __m256i four = brdcst(4);
+   static const __m256i eight = brdcst(8);
+  
+   vals(1) = vmax(r0,r1);
+   vals(2) = vmax(r2,r3);
+   vals(3) = vmax(r4,r5);
+   vals(4) = vmax(r6,r7);
+  
+   __m256i g = set(0,1,2,3); 
+   __m256i h = g + four;
+   mask(1) = blend(g,h,mask(1));
+   g += eight;
+   h += eight;
+   mask(2) = blend(g,h,mask(2));
+   g += eight;
+   h += eight;
+   mask(3) = blend(g,h,mask(3));
+   g += eight;
+   h += eight;
+   mask(4) = blend(g,h,mask(4));
+   
+   mask(5) = vals(1) > vals(2);
+   mask(6) = vals(3) > vals(4);
+   
+   vals(1) = vmax(vals(1),vals(2));
+   vals(3) = vmax(vals(3),vals(4));
+
+   mask(1) = blend(mask(1),mask(2),mask(5));
+   mask(3) = blend(mask(3),mask(4),mask(6));
+   
+   struct rpair x;
+   x.val = vmax(vals(1),vals(3));
+   x.index = blend(mask(1),mask(3),vals(1) > vals(3));
+   return x;
+}
+
+
+
+
+
 #define tsz 64
 #define unroll 8
 void  bleh4(double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ s, double* __restrict__ mp, int* __restrict__ mpi, int offsetr, int offsetc, int offsetmp){
@@ -84,10 +136,8 @@ void  bleh4(double* __restrict__ cov, const double* __restrict__ df, const doubl
          }
          for(int k = 0; k < unroll; k+=2){
             __m256i r = brdcst(i);
-            int l = testnz(mask(k));
-            int m = testnz(mask(k+1));
-            if(l){
-               if(m){
+            if(testnz(mask(k))){
+               if(testnz(mask(k+1))){
                   maskstore(r,mask(k),mpi+i+j+4*k);
                   maskstore(r,mask(k+1),mpi+i+j+4*k+4);
                   maskstore(cov_r(k),mask(k),mp+i+j+4*k);
@@ -98,36 +148,18 @@ void  bleh4(double* __restrict__ cov, const double* __restrict__ df, const doubl
                   maskstore(r,mask(k),mpi+i+j+4*k+4);
                }
             }
-            else if(m){
+            else if(testnz(mask(k+1))){
                maskstore(cov_r(k),mask(k),mp+i+j+4*k);
                maskstore(r,mask(k),mpi+i+j+4*k+4);
             }
          }
-         for(int k = 0; k < unroll/2; k++){
-            mask(k) = cov_r(2*k) > cov_r(2*k+1);
+         block<__m256d> c = cov_r;
+         struct rpair r = reduce(c(0),c(1),c(2),c(3),c(4),c(5),c(6),c(7));
+         __m256i msk = r.val > brdcst(mp,i+j);
+         if(testnz(msk)){
+            maskstore(r.val,msk,mp+i+j);
+            maskstore(r.index,msk,mpi+i+j);
          }
-         __m256i base = set(0,1,2,3);
-         for(int k = 0; k < unroll/2; k++){
-            if(testnz(mask(2*k))){
-               mask(k+unroll/2) = blend(
-            }
-         }
-         for(int k = 0; k < unroll/4; k++){
-         
-         }
-      }
-      for(int j = 0; j < tsz; j++){
-         if(mp[i] < cov[j]*s[i]*s[i+j+offsetc]){
-            mp[i] = cov[j]*s[i]*s[i+j+offsetc];
-            mpi[i] = i+offsetc+j;
-         }
-      }
-      for(int j = 0; j < tsz; j++){
-         if(mp[i+j+offsetc] < cov[j]*s[i]*s[i+j+offsetc]){
-            mp[i+j+offsetc] = cov[j]*s[i]*s[i+j+offsetc];
-            mpi[i+j+offsetc] = i+offsetc+j;
-         }
-      }*/
       }
    }
 }

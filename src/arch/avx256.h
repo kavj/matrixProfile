@@ -11,19 +11,46 @@ namespace avx256_t{
 #endif
 
 
-#define stride 4
-static inline __m256d wrapper blend(__m256d compar, __m256d base, __m256d mask){
+static inline int wrapper testnz(__m256i a){
+  _mm256_testnzc_si256(a,a);
+}
+
+static inline int wrapper testnz(__m256d a){
+   _mm256_testnzc_pd(a,a);
+}
+
+static inline void wrapper maskstore(__m256d a, __m256i msk, double* b){
+   _mm256_maskstore_pd(b,msk,a);
+}
+
+static inline void wrapper maskstore(__m256i a, __m256i msk, int* b){
+   _mm256_maskstore_epi32(b,msk,a);
+}
+
+
+static inline __m256i wrapper blend(__m256i compar, __m256i base, __m256i mask){
+   return _mm256_blendv_epi8(base,compar,mask);
+}
+/*
+static inline __m256d wrapper blend(__m256d compar, __m256d base, __m256i mask){
    return _mm256_blendv_pd(base,compar,mask);
 }
 
+*/
+
+static inline __m256d wrapper blend(__m256d compar, __m256d base, __m256d mask){
+   return _mm256_blendv_pd(base,compar,mask);
+}
+/*
 // In the case of indexing, we often set integer values using the result of a floating point comparison. 
 static inline __m256i wrapper blend(__m256i compar, __m256i base, __m256d mask){
    return _mm256_blendv_epi8(base,compar,_mm256_castpd_si256(mask));
 }
-
+*/
 static inline __m256d wrapper select1L(__m256d a, __m256d b){
    return _mm256_blend_pd(a,b,0x0E);
 }
+
 static inline __m256d wrapper aload(const double *a, int offset){
    return _mm256_load_pd(a+offset);
 }
