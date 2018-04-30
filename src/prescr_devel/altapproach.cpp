@@ -4,7 +4,6 @@ using namespace avx256_t;
 
 struct rpair { __m256d val; __m256i index;};
 
-
  
 static inline struct rpair __attribute__((always_inline)) reduce(const __m256d& r0, const __m256d& r1, const __m256d& r2, const __m256d& r3,  const __m256d& r4, const __m256d& r5, const __m256d& r6, const __m256d& r7){
 
@@ -56,6 +55,10 @@ static inline struct rpair __attribute__((always_inline)) reduce(const __m256d& 
 
 #define tsz 64
 #define unroll 8
+#define simlen 4
+
+
+
 void  symm_pearson_reduct_kern(double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ s, double* __restrict__ mp, int* __restrict__ mpi, int offsetr, int offsetc, int offsetmp){
    cov = (double*)__builtin_assume_aligned(cov,32);
    df = (const double*)__builtin_assume_aligned(df,32);
@@ -68,7 +71,7 @@ void  symm_pearson_reduct_kern(double* __restrict__ cov, const double* __restric
       for(int j = 0; j < tsz; j+=32){
          block<__m256d> cov_r;
          for(int k = 0; k < unroll; k++){
-            cov_r(k) = aload(cov,4*(j+k));
+            cov_r(k) = aload(cov,simlen*(j+k));
          }
          __m256d q = brdcst(dx,i);
          for(int k = 0; k < unroll; k++){
@@ -76,25 +79,25 @@ void  symm_pearson_reduct_kern(double* __restrict__ cov, const double* __restric
          }
          q = brdcst(df,i);
          for(int k = 0; k < unroll; k++){
-            cov_r(k) = mul_add(q,uload(dx,i+j+4*k),cov_r(k));
-            astore(cov_r(k),cov,4*(j+k));
+            cov_r(k) = mul_add(q,uload(dx,i+j+simlen*k),cov_r(k));
+            astore(cov_r(k),cov,simlen*(j+k));
          }
          q = brdcst(s,i);
          for(int k = 0; k < unroll; k++){
             cov_r(k) *= q;
          }
          for(int k = 0; k < unroll; k++){
-            cov_r(k) *= uload(s,i+j+4*k);
+            cov_r(k) *= uload(s,i+j+simlen*k);
          }
          block<__m256i> mask;
          for(int k = 0; k < unroll; k++){
-            mask(k) = cov_r(k) > uload(mp,i+j+4*k);
+            mask(k) = cov_r(k) > uload(mp,i+j+simlen*k);
          }
-         for(int k = 0; k < unroll; k+=2){
+         for(int k = 0; k < unroll; k++){
             __m256i r = brdcst(i);
             if(testnz(mask(k))){
-               maskstore(cov_r(k),mask(k),mp+i+j+4*k);
-               maskstore(r,mask(k),mpi+i+4*k);
+               maskstore(cov_r(k),mask(k),mp+i+j+simlen*k);
+               maskstore(r,mask(k),mpi+i+simlen*k);
             }
          }
          block<__m256d> c = cov_r;
@@ -111,6 +114,8 @@ void  symm_pearson_reduct_kern(double* __restrict__ cov, const double* __restric
 }
 
 
+
+// Compilers have trouble optimizing code with lots of hoisted temporary variables and things. If we don't have an optimized version for the target architecture, we can still try a fixed sized tile with alignment and no aliasing guarantees.
 
 #define tsz 64 
 void  reference_pearson_reduc(double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ s, double* __restrict__ mp, int* __restrict__ mpi, int offsetr, int offsetc, int offsetmp){
