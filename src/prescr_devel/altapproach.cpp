@@ -98,8 +98,7 @@ void  symm_pearson_reduct_kern(double* __restrict__ cov, const double* __restric
                maskstore(r,mask(k),mpi+i+simlen*k);
             }
          }
-         block<__m256d> c = cov_r;
-         struct rpair r = reduce(c(0),c(1),c(2),c(3),c(4),c(5),c(6),c(7));
+         struct rpair r = reduce(cov_r(0),cov_r(1),cov_r(2),cov_r(3),cov_r(4),cov_r(5),cov_r(6),cov_r(7));
          //Todo: technically this is incorrect, as we're writing back 4 operands rather than 1. It would be possible to do a final comparison against a temporary buffer and make one sweep at the end
          // alternatively use the if statement to determine if we need to do a horizontal max (since that is quite expensive)
          __m256i msk = r.val > brdcst(mp,i+j);
