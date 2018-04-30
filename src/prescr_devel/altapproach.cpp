@@ -136,13 +136,13 @@ void reference_pearson_reduc(double* __restrict__ cov, const double* __restrict_
       for(int j = 0; j < tsz; j++){
          if(mp[i] < a[j]){
             mp[i] = a[j];
-            mpi[i] = i+offsetc+j;
+            mpi[i] = i+j+offsetc;
          }
       }
       for(int j = 0; j < tsz; j++){
          if(mp[i+j+offsetc] < a[j]){
             mp[i+j+offsetc] = a[j];
-            mpi[i+j+offsetc] = i+j+offsetc;
+            mpi[i+j+offsetc] = i+j+offsetr;
          }
       }
    }
