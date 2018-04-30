@@ -129,11 +129,9 @@ void reference_pearson_reduc(double* __restrict__ cov, const double* __restrict_
       for(int j = 0; j < tsz; j++){
          cov[j] += dx[i]*df[i+j+offsetc];
       }
+      double a[tsz];
       for(int j = 0; j < tsz; j++){
          cov[j] += df[i]*dx[i+j+offsetc];
-      }
-      double a[64];
-      for(int j = 0; j < tsz; j++){
          a[j] = cov[j]*s[i]*s[i+j+offsetc];
       }
       for(int j = 0; j < tsz; j++){
