@@ -52,11 +52,9 @@ static inline struct rpair __attribute__((always_inline)) reduce(const __m256d& 
 }
 
 
-
 #define tsz 64
 #define unroll 8
 #define simlen 4
-
 
 
 void  symm_pearson_reduct_kern(double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ s, double* __restrict__ mp, int* __restrict__ mpi, int offsetr, int offsetc, int offsetmp){
@@ -107,7 +105,7 @@ void  symm_pearson_reduct_kern(double* __restrict__ cov, const double* __restric
          __m256i msk = r.val > brdcst(mp,i+j);
          if(testnz(msk)){
             maskstore(r.val,msk,mp+i+j);
-            maskstore(r.index,msk,mpi+i+j);
+            maskstore(r.index+brdcst(i+j+offsetc),msk,mpi+i+j);
          }
       }
    }
@@ -115,10 +113,11 @@ void  symm_pearson_reduct_kern(double* __restrict__ cov, const double* __restric
 
 
 
-// Compilers have trouble optimizing code with lots of hoisted temporary variables and things. If we don't have an optimized version for the target architecture, we can still try a fixed sized tile with alignment and no aliasing guarantees.
+// If we don't have an optimized intrinsic version for the target
+// we can usually get reasonable code if we guarantee alignment conditions, tile shape, and lack of aliasing
 
 #define tsz 64 
-void  reference_pearson_reduc(double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ s, double* __restrict__ mp, int* __restrict__ mpi, int offsetr, int offsetc, int offsetmp){
+void reference_pearson_reduc(double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ s, double* __restrict__ mp, int* __restrict__ mpi, int offsetr, int offsetc, int offsetmp){
    cov = (double*)__builtin_assume_aligned(cov,32);
    df = (const double*)__builtin_assume_aligned(df,32);
    dx = (const double*)__builtin_assume_aligned(dx,32);
@@ -133,16 +132,20 @@ void  reference_pearson_reduc(double* __restrict__ cov, const double* __restrict
       for(int j = 0; j < tsz; j++){
          cov[j] += df[i]*dx[i+j+offsetc];
       }
+      double a[64];
       for(int j = 0; j < tsz; j++){
-         if(mp[i] < cov[j]*s[i]*s[i+j+offsetc]){
-            mp[i] = cov[j]*s[i]*s[i+j+offsetc];
+         a[j] = cov[j]*s[i]*s[i+j+offsetc];
+      }
+      for(int j = 0; j < tsz; j++){
+         if(mp[i] < a[j]){
+            mp[i] = a[j];
             mpi[i] = i+offsetc+j;
          }
       }
       for(int j = 0; j < tsz; j++){
-         if(mp[i+j+offsetc] < cov[j]*s[i]*s[i+j+offsetc]){
-            mp[i+j+offsetc] = cov[j]*s[i]*s[i+j+offsetc];
-            mpi[i+j+offsetc] = i+offsetc+j;
+         if(mp[i+j+offsetc] < a[j]){
+            mp[i+j+offsetc] = a[j];
+            mpi[i+j+offsetc] = i+j+offsetc;
          }
       }
    }

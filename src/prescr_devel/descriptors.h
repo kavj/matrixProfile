@@ -3,7 +3,6 @@
 #include "alloc.h"
 #include "mkl.h"
 
-// This should probably be temporary. Since I end up having to distribute stuff frequently, it would be a good idea to generalize the striding somewhat for 1 and 2D strides
 
 // rearrange attributes
 static inline int   __attribute__((always_inline)) paddedlen(int buflen, int unitsz, int alignmt){ return  (buflen*unitsz) + ((buflen*unitsz)%alignmt ? alignmt - (buflen*unitsz)%alignmt : 0);}
@@ -11,7 +10,7 @@ static inline int   __attribute__((always_inline)) paddedlen(int buflen, int uni
 template<typename dtype> struct buf_strided{
    
    buf_strided(){} 
-   inline __attribute__((always_inline)) buf_strided(int blklen, int blkcount, int alignmt) : bcount(blkcount), blen(blklen), bstride(paddedlen(blklen,sizeof(dtype),alignmt)){
+   inline __attribute__((always_inline)) buf_strided(int blklen, int blkcount, int alignmt) : bcount(blkcount), blen(blklen), bstride(paddedlen(blklen,sizeof(dtype),alignmt)), ownsmem(true){
        dat = reinterpret_cast<dtype>(init_buffer(blklen,blkcount,alignmt));
    }
    inline __attribute__((always_inline)) ~buf_strided(){
@@ -36,7 +35,7 @@ struct buf_indexed{
    buf_indexed(dtype* dat, int len, int blocklen) : dat(dat), len(len), blen(blocklen), ownsmem(false) {}
    ~buf_indexed(){
       if(ownsmem){
-         dtype* dat;
+         free(dat);
       }
    }
    inline dtype* __attribute__((always_inline)) operator()(int i)          { return (i*blen < len) ? dat + i*blen : nullptr;}
