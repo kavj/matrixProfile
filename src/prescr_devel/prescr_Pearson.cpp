@@ -51,6 +51,10 @@ struct rpair rescaled_max_reduct(double* __restrict__ cov,  const double* __rest
       struct rpair r = reduce(cov_r(0),cov_r(1),cov_r(2),cov_r(3),cov_r(4),cov_r(5),cov_r(6),cov_r(7));
       // should just convert q to a vector
       __m256i msk = r.val > brdcst(xcorr,i);
+      if(testnz(msk)){
+         maskstore(r.val,msk,xcorr+tsz);
+         maskstore(r.index,msk,cindex+tsz);
+      }
    }
 }
 
