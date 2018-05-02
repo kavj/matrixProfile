@@ -40,7 +40,7 @@ static inline void xsum(double *a, double &s, double &e, int len){
 
 template<typename dtype>
 void fast_invcn(dtype* __restrict__ invn, const dtype* __restrict__ ts, const dtype* __restrict__ mu, int len, int sublen){
-   dtypee a = 0;
+   dtype a = 0;
    for(int i = 0; i < sublen; i++){
       dtype t = ts[i] - mu[0];
       a += t*t;
