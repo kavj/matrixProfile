@@ -1,9 +1,8 @@
-#include<immintrin.h>
-#include "../arch/v256.h"
 
-
+#ifndef __BLOCK__
+#define __BLOCK__
 template<typename dt>
-struct reg_block{
+struct block{
   // inline reg_block() __attribute__((always_inline)){
   //  }
    dt r0;
@@ -63,4 +62,4 @@ struct reg_block{
 
 
 
-
+#endif
