@@ -5,12 +5,12 @@
 // update this later to deal with further edge cases
 // this is only used for the aligned allocations. Use regular malloc for outputs
 
-/*
+
 void* init_buffer(int buflen, int bufct, int alignmt){
    void* buf;
    posix_memalign(&buf,buflen*bufct,alignmt);
    return (void*)buf;
-}*/
+}
 
 // I need to handle error propagation... For now though, it would be good to 
 // this should return more than a pointer considering that the calculations basically belong here?
@@ -30,7 +30,7 @@ VSLCorrTaskPtr* init_taskptrs(const double* ts, int baselen, int sublen, int blk
          status = vsldCorrNewTaskX1D(covtsks+i,VSL_CORR_MODE_FFT,baselen,sublen,baselen+sublen-1,ts+i*(baselen-sublen+1),1);
       }
       else{
-         //status = vsldCorrNewTaskX1D(covtsks+i,VSL_CORR_MODE_FFT,taillen,sublen,taillen+sublen-1,ts+i*(baselen-sublen+1),1);
+         status = vsldCorrNewTaskX1D(covtsks+i,VSL_CORR_MODE_FFT,taillen,sublen,taillen+sublen-1,ts+i*(baselen-sublen+1),1);
       }
       if(status != VSL_STATUS_OK){
          // Build up real error checking once we have a less ad hoc architecture in place
