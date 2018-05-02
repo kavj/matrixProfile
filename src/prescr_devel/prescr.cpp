@@ -48,3 +48,5 @@ int maxpearson_partialauto(struct acorr_desc<double>& aux){
 }
 
 
+
+// Add pearson cross correlation here

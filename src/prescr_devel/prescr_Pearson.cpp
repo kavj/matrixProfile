@@ -32,7 +32,7 @@ struct rpair rescaled_max_reduct(double* __restrict__ cov,  const double* __rest
       block<__m256d> cov_r;
       __m256d q = brdcst(qinvn);
       for(int k = 0; k < unroll; k++){
-         cov_r(k) = q*aload(cov,simlen*(k));
+         cov_r(k) = q*aload(cov,simlen*k);
       }
       for(int k = 0; k < unroll; k++){
          cov_r(k) *= uload(invn,i+simlen*k);
