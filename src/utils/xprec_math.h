@@ -8,7 +8,6 @@
 
 // Todo: unwind the inline functions in place as I don't care for the reference passing here
 
-
 template<typename dtype>
 static inline void xadd(dtype &a, dtype &b){
    dtype c = a + b;
@@ -17,11 +16,6 @@ static inline void xadd(dtype &a, dtype &b){
    a = c;
 }
 
-static inline void xsplit(double &a,double &b){
-   double f = a*((double)(2<<27));
-   b = (f - (f - a));
-   a = a - f;
-}
 
 template<typename dtype>
 static inline void xmul(dtype &a, dtype &b){
@@ -30,13 +24,6 @@ static inline void xmul(dtype &a, dtype &b){
    a = c;
 }
 
-static inline void xsum(double *a, double &s, double &e, int len){
-   for (int i = 0; i < len; i++){
-      double b = a[i];
-      xadd(s,b);
-      e += b;
-   }
-}
 
 template<typename dtype>
 void fast_invcn(dtype* __restrict__ invn, const dtype* __restrict__ ts, const dtype* __restrict__ mu, int len, int sublen){
@@ -45,7 +32,7 @@ void fast_invcn(dtype* __restrict__ invn, const dtype* __restrict__ ts, const dt
       dtype t = ts[i] - mu[0];
       a += t*t;
    }
-   invn[0] = 1.0/a;
+   invn[0] = sqrt(1.0/a);
    for(int i = 1; i < len-sublen+1; i++){
       dtype b = ts[i+sublen-1];
       dtype c = ts[i-1];
@@ -96,20 +83,66 @@ void init_dfdx(dtype *a, dtype* mu, dtype *df, dtype *dx, int w, int n){
 
 
 template<typename dtype>
-void xmean_windowed(dtype *a, dtype *output, int len, int winlen){
+void xmean_windowed(dtype *a, dtype *mu, int len, int winlen){
    int mlen = len - winlen + 1;
-   dtype rsum = 0;
-   dtype rerr = 0;
-   xsum(a,rsum,rerr,winlen);
-   output[0] = (rsum + rerr)/winlen;
-   for (int i = winlen; i < len; i++){
-      dtype addrem = -1*a[i-winlen];
-      xadd(rsum,addrem);
-      rerr += addrem; 
-      addrem = a[i];
-      xadd(rsum,addrem);
-      rerr += addrem;
-      output[i-winlen+1] = (rsum + addrem)/winlen;
+   dtype u,v,w,x,y;
+   u = a[0];
+   v = 0;
+   for(int i = 1; i < winlen; i++){
+      w = u;
+      y = a[i];
+      u += y;
+      x = u - w;
+      v += (w-(u-x))+(y-x);
    }
+   mu[0] = (u+v)/winlen;
+   for(int i = winlen; i < mlen; i++){
+      w = u; 
+      y = -1*a[i-w];
+      u += y;
+      x = u - w;
+      v += (w-(u-x))+(y-x);
+
+      w = u;
+      y = a[i];
+      u += y;
+      x = u - w;
+      v += (w-(u-x))+(y-x);
+      mu[i-winlen+1] = (u+v)/winlen;
+   }
+
 }
+
+
+template<typename dtype>
+void sum_windowed(dtype *a, dtype *s, int len, int winlen){
+   int mlen = len - winlen + 1;
+   dtype u,v,w,x,y;
+   u = a[0];
+   v = 0;
+   for(int i = 1; i < winlen; i++){
+      w = u;
+      y = a[i];
+      u += y;
+      x = u - w;
+      v += (w-(u-x))+(y-x);
+   }
+   s[0] = u+v;
+   for(int i = winlen; i < mlen; i++){
+      w = u; 
+      y = -1*a[i-w];
+      u += y;
+      x = u - w;
+      v += (w-(u-x))+(y-x);
+
+      w = u;
+      y = a[i];
+      u += y;
+      x = u - w;
+      v += (w-(u-x))+(y-x);
+      s[i-winlen+1] = u+v;
+   }
+
+}
+
 
