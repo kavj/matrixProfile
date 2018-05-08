@@ -27,6 +27,10 @@ static inline void wrapper maskstore(__m256i a, __m256i msk, int* b){
    _mm256_maskstore_epi32(b,msk,a);
 }
 
+// intel intrinsics guide specifies __int64, but using int64_t generates an error using gcc
+static inline void wrapper maskstore(__m256i a, __m256i msk, long long* b){
+   _mm256_maskstore_epi64(b,msk,a);
+}
 
 static inline __m256i wrapper blend(__m256i compar, __m256i base, __m256i mask){
    return _mm256_blendv_epi8(base,compar,mask);
@@ -67,6 +71,8 @@ static inline void wrapper ustore(const __m256d& b, double* a,int offset){
    _mm256_storeu_pd(a+offset,b);
 }
 
+// mul_add needs an ifdef in cases where fma intrinsics won't be loaded
+
 static inline __m256d wrapper mul_add(const __m256d& a,const __m256d &b,const __m256d &c){
    return  _mm256_fmadd_pd(a,b,c);
 }
@@ -87,7 +93,8 @@ static inline __m256d wrapper vmin(const __m256d &a, const __m256d &b){
    return _mm256_min_pd(a,b);
 }
 
-static inline __m256i wrapper aload(const long* a, int offset){
+// long long is needed for masked stores on gcc
+static inline __m256i wrapper aload(const long long* a, int offset){
    return  _mm256_load_si256((__m256i*)(a+offset));
 }
 

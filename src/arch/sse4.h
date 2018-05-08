@@ -3,7 +3,7 @@
 #ifndef STRIDED
 #define STRIDED
 
-namespace avx256_t{
+namespace sse4_t{
 
 #define stride 4
 // double precision
@@ -22,35 +22,6 @@ static inline void astore(__m256d b, double *a, int offset){
 
 static inline void ustore(__m256d b, double* a,int offset){
    _mm_storeu_pd(a+offset,b);
-}
-
-static inline __m256d mul(__m256d a, __m256d b){
-   return _mm_mul_pd(a,b);
-}
-
-static inline __m256d add(__m256d a, __m256d b){
-   return _mm_add_pd(a,b);
-}
-
-static inline __m256i add(__m256i a, __m256i b){
-   return _mm_add_epi64(a,b);
-}
-
-static inline __m256d sub(__m256d a, __m256d b){
-   return _mm_sub_pd(a,b);
-}
-
-static inline __m128d div(__m128d a, __m128d b){
-   return _mm_div_pd(a,b);
-}
-
-// compares
-static inline __m128d cmpgtr(__m128d compar, __m128d base){
-   return _mm_cmp_pd(compar,base,_CMP_GT_OS);
-}
-
-static inline __m128d cmplt(__m128d compar, __m128d base){
-   return _mm_cmp_pd(compar,base,_CMP_LT_OS);
 }
 
 static inline __m128d mul_add(__m128d a, __m128d b, __m128d c){
@@ -159,34 +130,7 @@ static inline void ustore(__m256 , float* a,int offset){
    _mm256_storeu_ps(a+offset,b);
 }
 
-static inline __m256 mul(__m256 a, __m256 b){
-   return _mm256_mul_ps(a,b);
-}
 
-static inline __m256d add(__m256 a, __m256d b){
-   return _mm256_add_ps(a,b);
-}
-
-static inline __m256i add(__m256i a, __m256i b){
-   return _mm256_add_epi32(a,b);
-}
-
-static inline __m256d sub(__m256 a, __m256 b){
-   return _mm256_sub_ps(a,b);
-}
-
-static inline __m256d div(__m256 a, __m256 b){
-   return _mm256_div_ps(a,b);
-}
-
-// compares
-static inline __m256d cmpgtr(__m256 compar, __m256 base){
-   return _mm256_cmp_ps(compar,base,_CMP_GT_OS);
-}
-
-static inline __m256d cmplt(__m256 compar, __m256 base){
-   return _mm256_cmp_ps(compar,base,_CMP_LT_OS);
-}
 
 static inline __m256d mul_add(__m256 a, __m256 b, __m256 c){
    return  _mm256_fmadd_ps(a,b,c);
@@ -259,6 +203,68 @@ static inline __m256d brdcst(float a){
 static inline __m256i set(int i,int j,int k,int l){ // should we use stdint here?
    return _mm256_set_epi64x(l,k,j,i);
 }
+
+/*static inline __m256d mul(__m256d a, __m256d b){
+   return _mm_mul_pd(a,b);
+}
+
+static inline __m256d add(__m256d a, __m256d b){
+   return _mm_add_pd(a,b);
+}
+
+static inline __m256i add(__m256i a, __m256i b){
+   return _mm_add_epi64(a,b);
+}
+
+static inline __m256d sub(__m256d a, __m256d b){
+   return _mm_sub_pd(a,b);
+}
+
+static inline __m128d div(__m128d a, __m128d b){
+   return _mm_div_pd(a,b);
+}
+
+// compares
+static inline __m128d cmpgtr(__m128d compar, __m128d base){
+   return _mm_cmp_pd(compar,base,_CMP_GT_OS);
+}
+
+static inline __m128d cmplt(__m128d compar, __m128d base){
+   return _mm_cmp_pd(compar,base,_CMP_LT_OS);
+}
+
+static inline __m256 mul(__m256 a, __m256 b){
+   return _mm256_mul_ps(a,b);
+}
+
+static inline __m256d add(__m256 a, __m256d b){
+   return _mm256_add_ps(a,b);
+}
+
+static inline __m256i add(__m256i a, __m256i b){
+   return _mm256_add_epi32(a,b);
+}
+
+static inline __m256d sub(__m256 a, __m256 b){
+   return _mm256_sub_ps(a,b);
+}
+
+static inline __m256d div(__m256 a, __m256 b){
+   return _mm256_div_ps(a,b);
+}
+
+// compares
+static inline __m256d cmpgtr(__m256 compar, __m256 base){
+   return _mm256_cmp_ps(compar,base,_CMP_GT_OS);
+}
+
+static inline __m256d cmplt(__m256 compar, __m256 base){
+   return _mm256_cmp_ps(compar,base,_CMP_LT_OS);
+}
+
+
+*/
+
 
 
 }
