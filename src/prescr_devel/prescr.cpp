@@ -3,50 +3,79 @@
 #include<cmath>
 #include "../utils/reg.h"
 #include "descriptors.h"
-#include "../kernel/prescr_Pearson.h"
+#include "prescr_Pearson.h"
 
 
+// in general we can bound the amount of memory needed for buffering queries if we aren't using some ridiculously short stride
+// in that case it makes more sense to use exact calculation anyway
+//
 
-// if it's not parallel, we allocate fewer buffers assume parallel for interactivity
-int maxpearson_partialauto(struct acorr_desc<double>& aux){
-   int iters = aux.required_passes();
-   //int alias_offset = aux.sublen-1;  // truncate edge terms of cross correlation
-   int sublen = aux.sublen;
-   for(int i = 0; i < iters; i++){     
-      int qct = (i == iters - 1) ? aux.q.bcount : aux.tailqcount;
-      #pragma omp parallel for
-      for(int j = 0; j < qct; j++){
-         double* query = aux.q(j);
-         double m = (aux.mu(0)[(i+j)*aux.qbasestride]);
-         //double* a = aux.ts(i+j,aux.qbasestride);
-         for(int k = 0; k < sublen; k++){
-        //    query[k] = a[k] - m;
+#define buflen 65536
+
+
+template<typename dtype, typename itype>
+int prescrpearson_partialauto(const stridedbuf<dtype>& ts, int sublen){
+
+   const int qstride = sublen/4;
+   const int qct = (ts.len-sublen+1)/qstride;  // using this a default base stride
+   const int qbuflen = paddedlen(sublen,32);    
+   //const int buflen = 
+   const int bufct = ts.len/buflen + (ts.len%buflen ? 1 : 0);
+   const int basestride = buflen - sublen + 1;
+   stridedbuf<dtype> qbuf(qbuflen,qct);
+   stridedbuf<dtype> mu(mlen,ts.stride,);
+   stridedbuf<dtype> invn(mlen,ts.stride,);
+   stridedbuf<dtype> covbufs(buflen,);
+   stridedbuf<dtype> qcov(  )
+   stridedbuf<dtype> qcorr(  )
+   stridedbuf<dtype> qind(  )
+   
+   //stridedbuf<dtype> mp(mlen,ts.stride,);
+   //stridedbuf<itype> mpi(mlen,ts.stride,);
+ 
+   //need the MKL task pointers
+  // stridedbuf<>;
+   
+   xmean_windowed(ts(0),mu(0),ts.len,sublen); 
+  // init_dfdx(ts(0),mu(0),df(0),dx(0),sublen,ts.len);
+   
+   #pragma omp parallel for
+   for(int j = 0; j < qnum; j++){
+      int skipcount = qbufct*i+j;
+      center_query(ts(skipcount,qstride),qbuf(j),mu(skipcount),sublen,qbufct,qstride,qbuflen);
+   }
+   #pragma omp parallel for 
+   for(int i = 0; i < ts.bcount; i++){           
+      for(int j = 0; j <  qct; j++){
+         int status = vsldCorrExecX1D(covtsks[j],qbuf(j),1,covbufs(j),ts.stride+sublen-1);
+         for(int k = 0; k < qbufct; k++){
+            
          }
       }
-      #pragma omp parallel for
-      for(int j = 0; j <  aux.bcount; j++){
-         int cct = (j < aux.bcount-1) ? aux.blen : aux.taillen;
-         int cindoffset = j*aux.bstride; 
-         for(int k = 0; k < qct; k++){
-            int status = vsldCorrExecX1D(aux.covtsks[j],aux.q(k),1,aux.covbufs(j),aux.blen+sublen-1);
-            int qbaseind = (j*aux.q.bcount + k)*aux.qbasestride;
-            // We should ensure that in the case where this is built as a single threaded operation, we don't allocate multiple buffers and simply reduce queries in place
-            rescaled_max_reduct(aux.cov(j),aux.xcorr(j),aux.invn(j),aux.xind(j),aux.invn(0)[qbaseind],qbaseind,aux.blen-sublen+1,j*aux.blen); //need count, need cindoffset);
-         }
-      }      
-      // reduce over smaller shared buffers here?
-      for(int j = 0; j < qct; j++){
-         // reduce over number of per thread/section buffers
+      //int cindoffset = j*aux.bstride; 
+      for(int k = 0; k < qct; k++){
+          // int status = vsldCorrExecX1D(aux.covtsks[j],aux.q(k),1,aux.covbufs(j),aux.blen+sublen-1);
+         //int qbaseind = (j*aux.q.bcount + k)*aux.qbasestride;
+         //rescaled_max_reduct(aux.covbufs(j),aux.xcorr(j),aux.invn(j),aux.xind(j),aux.invn(0)[qbaseind],qbaseind,aux.blen-sublen+1,j*aux.blen); //need count, need cindoffset);
       }
    }
-   // reduce over thread buffers
-   for(int i = 0; i < 0; i++){
-    // maxpearson_ext_auto(aux.q(      
-//void maxpearson_ext_auto(const double* __restrict__ qcov, const double* __restrict__ invn, const double* __restrict__ df, const double* __restrict__ dx, const int* __restrict__ qind, double* __restrict__ mp, int* __restrict__ mpi, int count, int stride, int extraplen, int len){
+   // reduce over thread buffers      
+   for(int i = 0; i < qct; i++){
+
    }
+  // stridedbuf<dtype> df(mlen,ts.stride,);
+  // stridedbuf<dtype> dx(mlen,ts.stride,);
+   
+   for(int i = 0; i < qct; i++){
+      // extrapolate pass
+   }
+
    return 0;
 }
 
 
-
+template<typename dtype, typename itype>
+int prescrpearson_partialcross(){
+   
+}
 // Add pearson cross correlation here

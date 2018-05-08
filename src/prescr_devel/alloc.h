@@ -1,21 +1,39 @@
-#pragma once
+
+
+
+#ifndef __ALLOC_FILE__
+#define __ALLOC_FILE__
 #define _POSIX_C_SOURCE 200809L
 #include<cstdlib>
-#include<mkl.h>
-// update this later to deal with further edge cases
-// this is only used for the aligned allocations. Use regular malloc for outputs
+#include<cstdio>
+//#include<mkl.h>
 
 
-void* init_buffer(int buflen, int bufct, int alignmt){
-   void* buf;
-   posix_memalign(&buf,buflen*bufct,alignmt);
-   return (void*)buf;
+
+void* init_buffer(int buflen, int alignmt){
+   double* buf;
+   int chk = posix_memalign((void**)(&buf),alignmt,buflen);
+   //int chk = posix_memalign((void**)(&buf),64,131072*sizeof(double));
+   //int chk = posix_memalign((void**)(&buf),alignmt,buflen);
+   if(chk != 0){
+    /*  if(chk == EINVAL){
+         printf("unaligned\n");
+      }
+      else if(chck == ENOMEM){
+      */
+       perror("posix_memalign");
+     }
+  /// }
+   //double* b =;
+//   exit(1);
+
+   return buf;
 }
 
 // I need to handle error propagation... For now though, it would be good to 
 // this should return more than a pointer considering that the calculations basically belong here?
 // otherwise we can just pass in everything required I guess
-
+/*
 VSLCorrTaskPtr* init_taskptrs(const double* ts, int baselen, int sublen, int blkct, int taillen){
   
     // this looks weird, see MKL docs later 
@@ -49,5 +67,6 @@ int dest_taskptrs(VSLCorrTaskPtr* covtsks, int blkct){
    }
    return 0;
 }
+*/
 
-
+#endif
