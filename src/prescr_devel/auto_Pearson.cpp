@@ -88,7 +88,6 @@ void pauto_pearson_edgekern(double* __restrict__ cov, const double* __restrict__
 // If we don't have an optimized intrinsic version for the target
 // we can usually get reasonable code if we guarantee alignment conditions, tile shape, and lack of aliasing
 
-#define tsz 64 
 void pauto_pearson_refkern(double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ s, double* __restrict__ mp, int* __restrict__ mpi, int offsetr, int offsetc, int offsetmp){
    cov = (double*)__builtin_assume_aligned(cov,32);
    df = (const double*)__builtin_assume_aligned(df,32);
