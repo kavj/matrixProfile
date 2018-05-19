@@ -98,7 +98,7 @@ void xmean_windowed(dtype *a, dtype *mu, int len, int winlen){
    mu[0] = (u+v)/winlen;
    for(int i = winlen; i < mlen; i++){
       w = u; 
-      y = -1*a[i-w];
+      y = -1*a[i-winlen];
       u += y;
       x = u - w;
       v += (w-(u-x))+(y-x);
@@ -110,7 +110,6 @@ void xmean_windowed(dtype *a, dtype *mu, int len, int winlen){
       v += (w-(u-x))+(y-x);
       mu[i-winlen+1] = (u+v)/winlen;
    }
-
 }
 
 
@@ -130,7 +129,7 @@ void sum_windowed(dtype *a, dtype *s, int len, int winlen){
    s[0] = u+v;
    for(int i = winlen; i < mlen; i++){
       w = u; 
-      y = -1*a[i-w];
+      y = -1*a[i-winlen];
       u += y;
       x = u - w;
       v += (w-(u-x))+(y-x);
@@ -142,7 +141,6 @@ void sum_windowed(dtype *a, dtype *s, int len, int winlen){
       v += (w-(u-x))+(y-x);
       s[i-winlen+1] = u+v;
    }
-
 }
 
 
