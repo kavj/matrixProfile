@@ -1,7 +1,7 @@
 #include<algorithm>
 #include "../utils/xprec_math.h"
 #include "../utils/cov.h"
-#include "prescr_Pearson.h"
+//#include "prescr_Pearson.h"
 #include "auto_Pearson.h"
 #define tsz 16384
 #define ksz 248
@@ -47,50 +47,47 @@ int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int subl
    xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
    init_dfdx(ts(0), mu(0), df(0), dx(0),sublen,ts.len);
    std::fill(mp(0),mp(0)+mp.len,-1.0);
-   std::fill(mpi(0),mpi(0)+mpi.len,-1);          
+   std::fill(mpi(0),mpi(0)+mpi.len,-1); 
+    
+   //Todo: fix centering of query        
    #pragma omp parallel for
    for(int i = 0; i < tilesperdim; i++){
       center_query(ts(i), mu(i), q(i), sublen);
    }
+   return 0;
    for(int i = 0; i < tilesperdim; i++){
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
-         batchcov(ts(j),cov(j),q(j),mu(i+j),tsz,sublen);
-         int cindoffset = i*tsz+minlag;
-         int qbaseind = j*tsz; 
-         double qinvn = invn(j)[0];
-         double qcorr = -1.0; 
-         itype qmatch = -1;
-         for(int k = 0; k < step; k++){
-            // this needs to be moved down a layer, sincye it exposes simd instructions
-            struct rpair r = rescaled_max_reduct(cov(j+k),invn(j+k),mp(j+k),mpi(j+k),qinvn,qcorr,qbaseind,cindoffset);
-            astore(r.val,mp(j),0);
-           /* if(r.val > qcorr){
-               qcorr = r.val;
-               qmatch = r.index;
-            }*/
-         }
-         if(qcorr > mp(j)[0]){
-            mp(j)[0] = qcorr; 
-            mpi(j)[0] = qmatch;
-         }
-         int prefixlen = (i+j)*ksz;
-         for(int k = 0; k < step; k++){ 
-            // need edge check here 
-            // something like --> int lim = std::min(mlen - (i+k)*ksz,step); 
-            // the problem is this section probably needs a lot of cleanup. I should probably split this so that validation happens at this level and the tiling goes one level deeper
-            // 
-            for(int l = 0; l < step; l++){
-               int offset = j*step+k;   // <-- double check this probably no longer correct
-               if(prefixlen+(k+l)*ksz <= mlen){
+         if((i+j+2) < tilesperdim){
+             batchcov(ts(j),cov(j),q(j),mu(i+j),tsz,sublen);
+            int cindoffset = i*tsz+minlag;
+            int qbaseind = j*tsz; 
+            double qinvn = invn(j)[0];
+            double qcorr = -1.0; 
+            itype qmatch = -1;
+            int offset = (i+j)*tsz;
+            for(int k = 0; k < tsz; k++){
+               for(int l = 0; l < tsz; l++){
                   pauto_pearson_kern(cov(offset),df(offset),dx(offset),invn(offset),mp(offset),mpi(offset),j*tsz,(offset+l)*ksz); 
                }
-               else{
+            }
+         }
+         else{
+            continue;
+            int offset = (i+j)*tsz;
+            batchcov(ts(j),cov(j),q(j),mu(i+j),tsz,sublen);
+            int cindoffset = i*tsz+minlag;
+            int qbaseind = j*tsz; 
+            double qinvn = invn(j)[0];
+            double qcorr = -1.0; 
+            itype qmatch = -1;
+            int dlim = 0; 
+            for(int k = 0; k < tsz; k++){
+               for(int l = 0; l < tsz; l++){
                   pauto_pearson_edgekern(cov(offset),df(offset),dx(offset),invn(offset),mp(offset),mpi(offset),j*tsz,(offset+l)*ksz,mlen-(offset+l)*ksz);
                }
             }
          }
-         //printf("%d %d\n",i,j);
       }
    }
 }
