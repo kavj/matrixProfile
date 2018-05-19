@@ -1,3 +1,6 @@
+
+#ifndef MAX_REDUCE
+#define MAX_REDUCE
 #include "../arch/avx256.h"
 using namespace avx256_t;
 
@@ -5,7 +8,7 @@ using namespace avx256_t;
 struct rpair { __m256d val; __m256i index;};
 
  
-static inline struct rpair __attribute__((always_inline)) reduce(const __m256d& r0, const __m256d& r1, const __m256d& r2, const __m256d& r3,  const __m256d& r4, const __m256d& r5, const __m256d& r6, const __m256d& r7){
+static inline struct rpair __attribute__((always_inline)) max_reduce_8x1(const __m256d& r0, const __m256d& r1, const __m256d& r2, const __m256d& r3,  const __m256d& r4, const __m256d& r5, const __m256d& r6, const __m256d& r7){
 
    __m256i mask1, mask2, mask3, mask4, mask5, mask6;
    __m256d  op1, op2, op3, op4;
@@ -15,8 +18,8 @@ static inline struct rpair __attribute__((always_inline)) reduce(const __m256d& 
    mask3 = r4 > r5;
    mask4 = r6 > r7;
 
-   static const __m256i four = brdcst(4);
-   static const __m256i eight = brdcst(8);
+   const __m256i four = brdcst(4);
+   const __m256i eight = brdcst(8);
   
    op1 = vmax(r0,r1);
    op2 = vmax(r2,r3);
@@ -52,4 +55,9 @@ static inline struct rpair __attribute__((always_inline)) reduce(const __m256d& 
 }
 
 
+static inline struct rpair __attribute__((always_inline)) max_reduce_256x1(const __m256d& r0){
+   
 
+}
+
+#endif
