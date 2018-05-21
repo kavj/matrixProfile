@@ -1,5 +1,4 @@
 #include<algorithm>
-#include<cmath>
 #include"../utils/max_reduce.h"
 #include "prescr_Pearson.h"
 #include "auto_Pearson.h"
