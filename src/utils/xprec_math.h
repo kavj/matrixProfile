@@ -1,5 +1,4 @@
 #include<cmath>
-#include<stdint.h>
 #pragma once
 
 // Collection of in place 2 operand arithmetic and sliding window sum and average. These are based on 
@@ -8,21 +7,19 @@
 
 // Todo: unwind the inline functions in place as I don't care for the reference passing here
 
-template<typename dtype>
-static inline void xadd(dtype &a, dtype &b){
-   dtype c = a + b;
-   dtype d = c - a;
+auto xadd = [&] (auto a, auto b){
+   auto c = a + b;
+   auto d = c - a;
    b = ((a - (c - d)) + (b - d));
    a = c;
-}
+};
 
 
-template<typename dtype>
-static inline void xmul(dtype &a, dtype &b){
-   dtype c = a*b;
+auto xmul = [&] (auto a, auto b){
+   auto c = a*b;
    b = fma(a,b,-1*c);
    a = c;
-}
+};
 
 
 template<typename dtype>
@@ -126,7 +123,7 @@ void sum_windowed(dtype *a, dtype *s, int len, int winlen){
       v += (w-(u-x))+(y-x);
    }
    s[0] = u+v;
-   for(int i = winlen; i < mlen; i++){
+   for(int i = winlen; i < len; i++){
       w = u; 
       y = -1*a[i-winlen];
       u += y;
@@ -141,5 +138,4 @@ void sum_windowed(dtype *a, dtype *s, int len, int winlen){
       s[i-winlen+1] = u+v;
    }
 }
-
 
