@@ -1,4 +1,3 @@
-#include <cstdint>
 #include "../utils/max_reduce.h"
 #include "../arch/avx256.h"
 #include "../utils/reg.h"

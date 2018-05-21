@@ -1,6 +1,4 @@
 #include<algorithm>
-#include<cstdint>
-#include<cmath>
 #include "../utils/reg.h"
 #include "descriptors.h"
 #include "prescr_Pearson.h"

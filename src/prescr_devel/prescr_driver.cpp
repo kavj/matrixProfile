@@ -3,7 +3,6 @@
 #include<cstdlib>
 #include<ctime>
 #include "descriptors.h"
-#include "auto_Pearson.h"
 #include "exact_Pearson.h"
 
 
