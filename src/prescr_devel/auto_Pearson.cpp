@@ -4,7 +4,7 @@
 #include "../utils/reg.h"
 using namespace avx256_t;
 
-#define tsz 64
+#define tsz 128 
 #define step 32
 #define unroll 8
 #define simlen 4
@@ -45,11 +45,11 @@ void  pauto_pearson_kern(double* __restrict__ cov, const double* __restrict__ df
          for(int k = 0; k < unroll; k++){
             mask(k) = cov_r(k) > uload(mp,i+j+simlen*k);
          }
+         __m256i s = brdcst(i);
          for(int k = 0; k < unroll; k++){
-            __m256i r = brdcst(i);
             if(testnz(mask(k))){
                maskstore(cov_r(k),mask(k),mp+i+j+simlen*k);
-               maskstore(r,mask(k),mpi+i+simlen*k);
+               maskstore(s,mask(k),mpi+i+simlen*k);
             }
          }
          struct rpair r = max_reduce_8x1(cov_r(0),cov_r(1),cov_r(2),cov_r(3),cov_r(4),cov_r(5),cov_r(6),cov_r(7));
