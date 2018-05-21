@@ -48,10 +48,8 @@ int main(int argc, char* argv[]){
     }
     int mlen = n-m+1;
     //const int dstride = 65536-m+1;
-    stridedbuf<double> ts(1,n,n);
-    
-    // these should be count, stride, length so update later
-    //std::fill(
+    stridedbuf<double> ts(n);   
+ 
     if(!ts.isvalid()){
        printf("failed to allocate memory for time series\n");
     //   exit(1);
@@ -61,19 +59,15 @@ int main(int argc, char* argv[]){
        printf("null pointer returned\n");
        exit(1);
     }  
-//    printf("length: %d address:%lu\n",n,t);
-//    printf("%lf %lf \n",ts.dat[0],ts.dat[10]);
     
-    for(int i = 0; i < n/10; i++){
-       fscanf(f,"%lf\n",&(t[i]));
+    for(int i = 0; i < n; i++){
+       fscanf(f,"%lf\n",t+i);
     }
     printf("check1\n");
-
     fclose(f);
     clock_t t1 = clock();
     maxpearson_partialauto<double,long long>(ts,m,mlen,m);
     clock_t t2 = clock();
     printf("time: %lu\n",t2-t1);
-    
     return 0;
 }
