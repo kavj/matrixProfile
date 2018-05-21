@@ -1,7 +1,9 @@
-
+#include<algorithm>
  
 
 namespace scalar{
+
+
 #ifdef __GNUC__
 #define wrapper __attribute__((always_inline,artificial))
 #else
@@ -10,13 +12,12 @@ namespace scalar{
 
 
 
-#define stride 1
 
 static inline double wrapper aload(const double *a, int offset){
    return a[offset];
 }
 
-static inline __m256d wrapper uload(const double *a, int offset){
+static inline double wrapper uload(const double *a, int offset){
    return a[offset];
 }
 
@@ -41,11 +42,11 @@ static inline double wrapper mul_nadd(const double &a, const double &b, const do
 }
 
 static inline double wrapper vmax(const double &a, const double &b){
-   return max(a,b);
+   return std::max(a,b);
 }
 
 static inline double wrapper vmin(const double &a, const double &b){
-   return min(a,b);
+   return std::min(a,b);
 }
 
 static inline long wrapper aload(const long* a, int offset){
@@ -92,11 +93,11 @@ static inline int wrapper brdcst(const int a){
    return a;
 }
 
-static inline __m256d wrapper brdcst(const double a){
+static inline double wrapper brdcst(const double a){
    return a;
 }
 }
 
 
-#endif
-#endif
+//#endif
+//#endif

@@ -84,7 +84,6 @@ void init_dfdx(dtype *a, dtype* mu, dtype *df, dtype *dx, int w, int n){
 
 template<typename dtype>
 void xmean_windowed(dtype *a, dtype *mu, int len, int winlen){
-   int mlen = len - winlen + 1;
    dtype u,v,w,x,y;
    u = a[0];
    v = 0;
@@ -96,7 +95,7 @@ void xmean_windowed(dtype *a, dtype *mu, int len, int winlen){
       v += (w-(u-x))+(y-x);
    }
    mu[0] = (u+v)/winlen;
-   for(int i = winlen; i < mlen; i++){
+   for(int i = winlen; i < len; i++){
       w = u; 
       y = -1*a[i-winlen];
       u += y;
