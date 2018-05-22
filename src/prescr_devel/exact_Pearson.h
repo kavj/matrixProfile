@@ -13,7 +13,7 @@ int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int subl
 template<typename dtype, typename itype>
 int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int sublen){
    // allocate query buffers, basically covariance and normalized query
-   int tilesperdim = mlen/ksz + (mlen%ksz ? 1 : 0); // find max tiles in 1 direction
+   int tilesperdim = mlen/tsz + (mlen%tsz ? 1 : 0); // find max tiles in 1 direction
    if(!ts.isvalid()){
       printf("invalid time series\n");
    }
@@ -40,18 +40,18 @@ int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int subl
    const int tstride = 65536;
    const int tcount = ts.len/tstride;  
    
-   // currently segfaults after this point
  
    #pragma omp parallel for
    for(int i = 0; i < tcount; i++){
       center_query(ts(i), mu(i), q(i), sublen);
    }
+ 
    for(int i = 0; i < tilesperdim; i++){
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
          int offset = (i+j)*tsz;
+         batchcov(ts(j),cov(j),q(j),mu(i+j),tsz,sublen);
          if((i+j+2) < tilesperdim){
-            batchcov(ts(j),cov(j),q(j),mu(i+j),tsz,sublen);
             for(int k = 0; k < step; k++){
                for(int l = 0; l < step; l++){
                   pauto_pearson_kern(cov(offset),df(offset),dx(offset),invn(offset),mp(offset),mpi(offset),j*tsz,(offset+l)*ksz); 
@@ -59,7 +59,6 @@ int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int subl
             }
          }
          else{
-            batchcov(ts(j),cov(j),q(j),mu(i+j),tsz,sublen);
             int dlim = 0; 
             for(int k = 0; k < tsz; k++){
                for(int l = 0; l < tsz; l++){

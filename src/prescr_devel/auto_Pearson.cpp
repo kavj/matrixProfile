@@ -11,7 +11,7 @@ using namespace avx256_t;
 // Todo: separate different kernel implementations by namespace. This makes them selectable at compile time without messy ifdef nonsense
 
 
-void  pauto_pearson_kern(double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ invn, double* __restrict__ mp, long long* __restrict__ mpi, int offsetr, int offsetc){
+void   pauto_pearson_kern (double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ invn, double* __restrict__ mp, long long* __restrict__ mpi, int offsetr, int offsetc){
    cov = (double*)__builtin_assume_aligned(cov,32);
    df  = (const double*)__builtin_assume_aligned(df,32);
    dx  = (const double*)__builtin_assume_aligned(dx,32);
