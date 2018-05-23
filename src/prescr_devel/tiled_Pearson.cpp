@@ -1,7 +1,8 @@
 #include<algorithm>
-#define tlen 64 
+#define klen 64
 
-void pauto_pearson_refkern(
+
+static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    int*          __restrict__ mpi,
@@ -19,22 +20,22 @@ void pauto_pearson_refkern(
     dg =   (const double*)__builtin_assume_aligned(dg,32);
     invn = (const double*)__builtin_assume_aligned(invn,32);
 
-    for(int i = 0; i < tlen; i++){
-      for(int j = 0; j < tlen; j++){
+    for(int i = 0; i < klen; i++){
+      for(int j = 0; j < klen; j++){
          cov[j] += dg[i]*df[i+j+offsetc];
       }
-      double corr[tlen];
-      for(int j = 0; j < tlen; j++){
+      double corr[klen];
+      for(int j = 0; j < klen; j++){
          cov[j] += df[i]*dg[i+j+offsetc];
          corr[j] = cov[j]*invn[i]*invn[i+j+offsetc];
       }
-      for(int j = 0; j < tlen; j++){
+      for(int j = 0; j < klen; j++){
          if(mp[i] < corr[j]){
             mp[i] = corr[j];
             mpi[i] = i+j+offsetr+offsetc;
          }
       }
-      for(int j = 0; j < tlen; j++){
+      for(int j = 0; j < klen; j++){
          if(mp[i+j+offsetc] < corr[j]){
             mp[i+j+offsetc] = corr[j];
             mpi[i+j+offsetc] = j+offsetr;
@@ -46,11 +47,10 @@ void pauto_pearson_refkern(
 
 // annoying discrepancy between int and long long. May need to template these
 // The problem is that int is generally ideal unless long long happens to match the size of a particular mask
-
-void pauto_pearson_edgekern(
+static inline void pauto_pearson_edgekern(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
-   long long*    __restrict__ mpi, 
+   int*    __restrict__ mpi, 
    const double* __restrict__ df,  
    const double* __restrict__ dg, 
    const double* __restrict__ invn, 
@@ -61,7 +61,7 @@ void pauto_pearson_edgekern(
 {
     cov =  (double*)__builtin_assume_aligned(cov,32);
     mp =   (double*)__builtin_assume_aligned(mp,32);
-    mpi =  (long long*)__builtin_assume_aligned(mpi,32);
+    mpi =  (int*)__builtin_assume_aligned(mpi,32);
     df =   (const double*)__builtin_assume_aligned(df,32);
     dg =   (const double*)__builtin_assume_aligned(dg,32);
     invn = (const double*)__builtin_assume_aligned(invn,32);
@@ -85,6 +85,55 @@ void pauto_pearson_edgekern(
             mpi[j+offsetc] = j+offsetr;
          }
       }
+   }
+}
+
+//Todo: make preambles compiler agnostic
+// Combine these two functions. Use initial check
+
+void pauto_pearson_inner(
+   double*       __restrict__ cov,
+   double*       __restrict__ mp,
+   int*          __restrict__ mpi,
+   const double* __restrict__ invn,
+   const double* __restrict__ df,
+   const double* __restrict__ dg,
+   const int tlen,
+   const int offsetr,
+   const int offsetc,
+   const int upperbound,
+   const int a)
+{
+   cov =  (double*)__builtin_assume_aligned(cov,32);
+   mp =   (double*)__builtin_assume_aligned(mp,32);
+   mpi =  (int*)__builtin_assume_aligned(mpi,32);
+   df =   (const double*)__builtin_assume_aligned(df,32);
+   dg =   (const double*)__builtin_assume_aligned(dg,32);
+   invn = (const double*)__builtin_assume_aligned(invn,32);
+
+   if(a){    
+   for(int i = 0; i < tlen; i += klen){
+      for(int j = 0; j < tlen; j += klen){ // maybe best not to use squares?
+         // hmm may need to rethink, so that this works for the diagonals
+         pauto_pearson_refkern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,i+j+offsetr+offsetc);
+      }
+   }   
+   }
+   // else use
+   else{
+   int dmax = std::min(offsetc+tlen,upperbound);
+  
+   for(int i = 0; i < upperbound; i+= klen){
+      int cmax = std::min(dmax - i, upperbound);
+      for(int j = 0; j < cmax; j+= klen){
+         if(dmax < i+klen+tlen){
+            pauto_pearson_refkern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,i+j+offsetr+offsetc);
+         }
+         else{ // needs cleanup, may be slightly inaccurate, tlen is kind of redundant here too
+            pauto_pearson_edgekern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,tlen,i+j+offsetr+offsetc,upperbound);  
+         }
+      }
+   }
    }
 }
 
