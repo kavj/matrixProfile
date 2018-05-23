@@ -7,22 +7,34 @@
 #define ksz 248
 #define prefalign 64
 
+   // The rest needs to be a decision between full and partial tile. The full tile should instantiate a customizable size at runtime
+   // The partial tile has a shared constraint. 
+   // This is to be versioned as follows.
+   // Symmetric auto, symmetric cross (requires equal length), rc_auto, rc_cross. This can be passed in as compile time options.
+   // This function is the front end and should only deal with preprocessing and dispatch. 
+   // It should hand off to a solver for the low level work. At the lowest level we have kernels which should be fully unrolled. 
+ 
+
 template<typename dtype, typename itype>
 int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int sublen);
 
 template<typename dtype, typename itype>
 int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int sublen){
    // allocate query buffers, basically covariance and normalized query
-   int tilesperdim = mlen/tsz + (mlen%tsz ? 1 : 0); // find max tiles in 1 direction
    if(!ts.isvalid()){
       printf("invalid time series\n");
+   }
+   int tilesperdim = (mlen-minlag)/tsz; // find max tiles in 1 direction
+   int taillen = mlen - minlag - tsz*tilesperdim;
+   if(taillen > 0){
+      tilesperdim++;
    }
 
    stridedbuf<dtype>mu(mlen); stridedbuf<dtype>invn(mlen); stridedbuf<dtype>df(mlen);  stridedbuf<dtype>dx(mlen);
    stridedbuf<dtype>mp(mlen); stridedbuf<dtype>cov(mlen);  stridedbuf<itype>mpi(mlen); stridedbuf<dtype>q(tilesperdim,sublen);
 
    if(!(q.isvalid() && cov.isvalid() && mu.isvalid() && invn.isvalid() && df.isvalid()  && dx.isvalid() && mp.isvalid() && mpi.isvalid())){
-      printf("could not assign objects\n");   
+      printf("could not assign objects\n");
       return 0;
    } 
   
@@ -45,25 +57,12 @@ int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int subl
    for(int i = 0; i < tcount; i++){
       center_query(ts(i), mu(i), q(i), sublen);
    }
-   // The rest needs to be a decision between full and partial tile. The full tile should instantiate a customizable size at runtime
-   // The partial tile has a shared constraint. 
-   // This is to be versioned as follows.
-   // Symmetric auto, symmetric cross (requires equal length), rc_auto, rc_cross. This can be passed in as compile time options.
-   // This function is the front end and should only deal with preprocessing and dispatch. 
-   // It should hand off to a solver for the low level work. At the lowest level we have kernels which should be fully unrolled. 
- 
    for(int i = 0; i < tilesperdim; i++){
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
          int offset = (i+j)*tsz;
          batchcov(ts(j),cov(j),q(j),mu(i+j),tsz,sublen);
-         if((i+j+2) < tilesperdim){
-            pauto_pearson_inner(cov(offset),df(offset),dx(offset),invn(offset),mp(offset),mpi(offset),j*tsz,(offset+l)*ksz, tstride); 
-         }
-         else{
-            int dlim = 0; 
-            pauto_pearson_edge(cov(offset),df(offset),dx(offset),invn(offset),mp(offset),mpi(offset),j*tsz,(offset+l)*ksz,mlen-(offset+l)*ksz, tstride, dlim);
-         }
+         
       }
    }
 }

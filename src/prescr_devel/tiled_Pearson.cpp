@@ -1,14 +1,14 @@
 #include<algorithm>
-#define klen 64
+#define klen 32 
 
 
 static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    int*          __restrict__ mpi,
-   const double* __restrict__ invn,
    const double* __restrict__ df,
    const double* __restrict__ dg,
+   const double* __restrict__ invn,
    //const int tlen,
    const int offsetr,
    const int offsetc)
@@ -91,18 +91,17 @@ static inline void pauto_pearson_edgekern(
 //Todo: make preambles compiler agnostic
 // Combine these two functions. Use initial check
 
-void pauto_pearson_inner(
+void pauto_pearson(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    int*          __restrict__ mpi,
-   const double* __restrict__ invn,
    const double* __restrict__ df,
    const double* __restrict__ dg,
+   const double* __restrict__ invn,
    const int tlen,
    const int offsetr,
    const int offsetc,
-   const int upperbound,
-   const int a)
+   const int upperbound)
 {
    cov =  (double*)__builtin_assume_aligned(cov,32);
    mp =   (double*)__builtin_assume_aligned(mp,32);
@@ -111,29 +110,25 @@ void pauto_pearson_inner(
    dg =   (const double*)__builtin_assume_aligned(dg,32);
    invn = (const double*)__builtin_assume_aligned(invn,32);
 
-   if(a){    
-   for(int i = 0; i < tlen; i += klen){
-      for(int j = 0; j < tlen; j += klen){ // maybe best not to use squares?
-         // hmm may need to rethink, so that this works for the diagonals
-         pauto_pearson_refkern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,i+j+offsetr+offsetc);
+   if(upperbound >= 2*tlen){
+      for(int i = 0; i < tlen; i+= klen){
+         for(int j = 0; j < tlen; j += klen){
+            pauto_pearson_refkern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc);
+         }
       }
-   }   
    }
-   // else use
    else{
-   int dmax = std::min(offsetc+tlen,upperbound);
-  
-   for(int i = 0; i < upperbound; i+= klen){
-      int cmax = std::min(dmax - i, upperbound);
-      for(int j = 0; j < cmax; j+= klen){
-         if(dmax < i+klen+tlen){
-            pauto_pearson_refkern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,i+j+offsetr+offsetc);
-         }
-         else{ // needs cleanup, may be slightly inaccurate, tlen is kind of redundant here too
-            pauto_pearson_edgekern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,tlen,i+j+offsetr+offsetc,upperbound);  
+      int imx = std::min(upperbound,tlen);
+      for(int i = 0; i < imx; i += klen){
+         for(int j = 0; j < upperbound - i; j += klen){
+            if(i+j+2*klen < upperbound){
+               pauto_pearson_refkern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc);
+            }
+            else{
+               pauto_pearson_edgekern(cov+j, mp+j, mpi+j, df+j, dg+j, invn+j, klen, offsetr+j, offsetc, upperbound);
+            }
          }
       }
-   }
    }
 }
 
