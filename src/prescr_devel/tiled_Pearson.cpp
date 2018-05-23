@@ -9,7 +9,6 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
    const double* __restrict__ df,
    const double* __restrict__ dg,
    const double* __restrict__ invn,
-   //const int tlen,
    const int offsetr,
    const int offsetc)
 {
@@ -109,25 +108,24 @@ void pauto_pearson(
    df =   (const double*)__builtin_assume_aligned(df,32);
    dg =   (const double*)__builtin_assume_aligned(dg,32);
    invn = (const double*)__builtin_assume_aligned(invn,32);
-
-   if(upperbound >= 2*tlen){
+   
+   if(upperbound == 2*tlen){
       for(int i = 0; i < tlen; i+= klen){
          for(int j = 0; j < tlen; j += klen){
-            pauto_pearson_refkern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc);
+            pauto_pearson_refkern(cov+i,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc+i);
          }
       }
    }
    else{
       int imx = std::min(upperbound,tlen);
       for(int i = 0; i < imx; i += klen){
-         int cmx = jmx = std::min(upperbound - i, tlen);
-         for(int j = 0; j < cmx; j += klen){
-            if(i+j+2*klen < upperbound){
-               pauto_pearson_refkern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc);
-            }
-            else{
-               pauto_pearson_edgekern(cov+j, mp+j, mpi+j, df+j, dg+j, invn+j, klen, offsetr+j, offsetc, upperbound);
-            }
+         int cmx = std::min(upperbound - i, tlen);
+         int alignmx = cmx - cmx%klen;
+         for(int j = 0; j < alignmx; j += klen){
+            pauto_pearson_refkern(cov+i,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc+i);
+         }
+         if(cmx < alignmx){
+            pauto_pearson_edgekern(cov+i, mp+alignmx, mpi+alignmx, df+alignmx, dg+alignmx, invn+alignmx, klen, offsetr+alignmx, offsetc+i, upperbound);
          }
       }
    }

@@ -65,7 +65,7 @@ int main(int argc, char* argv[]){
     printf("check1\n");
     fclose(f);
     clock_t t1 = clock();
-    maxpearson_partialauto<double,long long>(ts,m,mlen,m);
+    maxpearson_partialauto<double,int>(ts,m,m);
     clock_t t2 = clock();
     printf("time: %lu\n",t2-t1);
     return 0;
