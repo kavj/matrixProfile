@@ -120,7 +120,8 @@ void pauto_pearson(
    else{
       int imx = std::min(upperbound,tlen);
       for(int i = 0; i < imx; i += klen){
-         for(int j = 0; j < upperbound - i; j += klen){
+         int cmx = jmx = std::min(upperbound - i, tlen);
+         for(int j = 0; j < cmx; j += klen){
             if(i+j+2*klen < upperbound){
                pauto_pearson_refkern(cov+j,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc);
             }
