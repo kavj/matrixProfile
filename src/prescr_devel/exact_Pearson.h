@@ -45,6 +45,12 @@ int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int subl
    for(int i = 0; i < tcount; i++){
       center_query(ts(i), mu(i), q(i), sublen);
    }
+   // The rest needs to be a decision between full and partial tile. The full tile should instantiate a customizable size at runtime
+   // The partial tile has a shared constraint. 
+   // This is to be versioned as follows.
+   // Symmetric auto, symmetric cross (requires equal length), rc_auto, rc_cross. This can be passed in as compile time options.
+   // This function is the front end and should only deal with preprocessing and dispatch. 
+   // It should hand off to a solver for the low level work. At the lowest level we have kernels which should be fully unrolled. 
  
    for(int i = 0; i < tilesperdim; i++){
       #pragma omp parallel for
@@ -52,19 +58,11 @@ int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int mlen, int subl
          int offset = (i+j)*tsz;
          batchcov(ts(j),cov(j),q(j),mu(i+j),tsz,sublen);
          if((i+j+2) < tilesperdim){
-            for(int k = 0; k < step; k++){
-               for(int l = 0; l < step; l++){
-                  pauto_pearson_kern(cov(offset),df(offset),dx(offset),invn(offset),mp(offset),mpi(offset),j*tsz,(offset+l)*ksz); 
-               }
-            }
+            pauto_pearson_inner(cov(offset),df(offset),dx(offset),invn(offset),mp(offset),mpi(offset),j*tsz,(offset+l)*ksz, tstride); 
          }
          else{
             int dlim = 0; 
-            for(int k = 0; k < tsz; k++){
-               for(int l = 0; l < tsz; l++){
-                  pauto_pearson_edgekern(cov(offset),df(offset),dx(offset),invn(offset),mp(offset),mpi(offset),j*tsz,(offset+l)*ksz,mlen-(offset+l)*ksz);
-               }
-            }
+            pauto_pearson_edge(cov(offset),df(offset),dx(offset),invn(offset),mp(offset),mpi(offset),j*tsz,(offset+l)*ksz,mlen-(offset+l)*ksz, tstride, dlim);
          }
       }
    }

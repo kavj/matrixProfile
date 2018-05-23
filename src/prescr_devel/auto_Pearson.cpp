@@ -3,12 +3,16 @@
 #include "../utils/reg.h"
 using namespace avx256_t;
 
-#define tsz 128 
-#define step 32
+#define tsz 65536
 #define unroll 8
 #define simlen 4
+#define step 32
 
 // Todo: separate different kernel implementations by namespace. This makes them selectable at compile time without messy ifdef nonsense
+
+
+
+
 
 
 void   pauto_pearson_kern (double* __restrict__ cov, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ invn, double* __restrict__ mp, long long* __restrict__ mpi, int offsetr, int offsetc){
@@ -26,7 +30,7 @@ void   pauto_pearson_kern (double* __restrict__ cov, const double* __restrict__ 
          }
          __m256d q = brdcst(dx,i);
          for(int k = 0; k < unroll; k++){
-            cov_r(k) = mul_add(q,uload(df,i+j+4*k),cov_r(k));
+            cov_r(k) = mul_add(q,uload(df,i+j+simlen*k),cov_r(k));
          }
          q = brdcst(df,i);
          for(int k = 0; k < unroll; k++){
