@@ -1,8 +1,11 @@
+#include <cstdio>
 #include<algorithm>
 #include "descriptors.h"
 #include "../utils/xprec_math.h"
 #include "../utils/cov.h"
 #include "tiled_Pearson.h"
+#include "../utils/primitive_print_funcs.h"
+#include "../utils/checkArray.h"
 #define prefalign 64
 
    // The rest needs to be a decision between full and partial tile. The full tile should instantiate a customizable size at runtime
@@ -21,18 +24,15 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
       printf("invalid time series\n");
    }
    int mlen = ts.len - sublen + 1;
-   const int tlen = std::max(paddedlen(4*sublen,prefalign),16384); // this should incorporate the overall size
+   const int tlen = std::max(paddedlen(4*sublen,prefalign),16384*8); // this should incorporate the overall size
    int tilesperdim = (mlen-minlag)/tlen; // find max tiles in 1 direction
    int taillen = mlen - minlag - tlen*tilesperdim;
    if(taillen > 0){
       tilesperdim++;
-      printf("%d tiles per dim\n",tilesperdim);
    }
 
    stridedbuf<dtype>mu(mlen); stridedbuf<dtype>invn(mlen); stridedbuf<dtype>df(mlen);  stridedbuf<dtype>dg(mlen);
    stridedbuf<dtype>q(tilesperdim,sublen); stridedbuf<dtype>cov(mlen);
-
-   //stridedbuf<dtype>mp(mlen); stridedbuf<dtype>cov(mlen);  stridedbuf<itype>mpi(mlen); stridedbuf<dtype>q(tilesperdim,sublen);
 
    if(!(q.isvalid() && cov.isvalid() && mu.isvalid() && invn.isvalid() && df.isvalid()  && dg.isvalid() && mp.isvalid() && mpi.isvalid())){
       printf("could not assign objects\n");
@@ -43,28 +43,26 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    mp.setstride(tlen), cov.setstride(tlen), mpi.setstride(tlen);
 
    xmean_windowed(ts(0),mu(0),ts.len,sublen);
-
    xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
    init_dfdx(ts(0), mu(0), df(0), dg(0),sublen,ts.len);
    std::fill(mp(0),mp(0)+mlen,-1.0);
    std::fill(mpi(0),mpi(0)+mlen,-1); 
 
-   const int tcount = ts.len/tlen;  
    #pragma omp parallel for
-   for(int i = 0; i < tcount; i++){
+   for(int i = 0; i < tilesperdim; i++){
       center_query(ts(i), mu(i), q(i), sublen);
    }
+  
    for(int i = 0; i < tilesperdim; i++){
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
          int offset = (i+j)*tlen;
          int upperbound = std::min(tlen,mlen-minlag-(i+j)*tlen);
-         batchcov(ts(i+j),cov(j),q(j),mu(j),upperbound,sublen);
+         batchcov_ref(ts(i+j)+minlag,cov(j),q(j),mu(j),upperbound,sublen);
+         double* c = cov(j);
          upperbound = std::min(2*tlen,mlen-minlag-(i+j)*tlen);
          pauto_pearson(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag,upperbound);
-         printf("%lf %d\n",mp(j)[0],mpi(j)[0]);
       }
    }
-   printf("reaches\n");
 }
  

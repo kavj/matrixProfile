@@ -1,8 +1,9 @@
+#include<cstdio>
 #include <algorithm>
 #include <cmath>
 #include "../arch/avx256.h"
-#include "../utils/reg.h"
-
+#include "reg.h"
+#include "checkArray.h"
 
 using namespace avx256_t;
 typedef double dtype;
@@ -14,7 +15,7 @@ typedef __m256d vtype;
 
 void center_query_ref(const dtype* __restrict__ ts, const dtype* __restrict__ mu, dtype* __restrict__ q, int sublen){
    for(int j = 0; j < sublen; j++){
-      q[j] = ts[j] - mu[j];
+      q[j] = ts[j] - mu[0];
    }
 }
 
@@ -28,7 +29,7 @@ void center_query(const dtype* __restrict__ ts, const dtype* __restrict__ mu, dt
       __m256d m = brdcst(mu,0);
       block<__m256d> op;
       for(int k = 0; k < unroll; k++){
-         op(k) = uload(ts,j+k*simlen);
+         op(k) = uload(ts,j+k*simlen) - m;
       }
       for(int k = 0; k < unroll; k++){
          astore(op(k),q,j+k*simlen);
@@ -41,8 +42,10 @@ void center_query(const dtype* __restrict__ ts, const dtype* __restrict__ mu, dt
 }
 
 
+
 void batchcov_ref(const dtype* __restrict__ ts, dtype* cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int count, int sublen){
    for(int i = 0; i < count; i++){
+      cov[i] = 0; 
       for(int j = 0; j < sublen; j++){
          cov[i] += (ts[i+j] - mu[i])*query[j];
       }
@@ -50,11 +53,9 @@ void batchcov_ref(const dtype* __restrict__ ts, dtype* cov, const dtype* __restr
 }
 
 //Todo: cleanup edge handling
-typedef double dtype; 
 //template<typename dtype,typename vtype>
 
 void batchcov(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int count, int sublen){
-   ts = (const dtype*) __builtin_assume_aligned(ts,32);
    cov = (dtype*) __builtin_assume_aligned(cov,32);
    query = (const dtype*) __builtin_assume_aligned(query,32);
    mu = (const dtype*) __builtin_assume_aligned(mu,32);
@@ -78,7 +79,7 @@ void batchcov(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype
          }
       }
       for(int j = 0; j < unroll; j++){
-         ustore(c(j),cov,i+j*simlen);
+         astore(c(j),cov,i+j*simlen);
       }
    }   // fringe should be done here. it would be possible to use a while loop countdown, like std::min(stride,count-i), and i need to add either a backshift or scalar loop that won't break
    if(count%loopwid){
