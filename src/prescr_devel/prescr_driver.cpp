@@ -2,6 +2,7 @@
 #include<cstdio>
 #include<cstdlib>
 #include<ctime>
+
 #include "descriptors.h"
 #include "exact_Pearson.h"
 
@@ -19,7 +20,7 @@ void writeDoubles(const char* name, double* t, int n){
     fclose(f);
 }
 
-void writeInts(const char* name, long* t, int n){
+void writeInts(const char* name, int* t, int n){
     FILE* f = fopen(name,"w");
     if(f == NULL){
         perror("fopen");  
@@ -30,6 +31,20 @@ void writeInts(const char* name, long* t, int n){
     }
     fclose(f);
 }
+
+void writeLongs(const char* name, long long* t, int n){
+    FILE* f = fopen(name,"w");
+    if(f == NULL){
+        perror("fopen");  
+        exit(1);
+    }
+    for(int i = 0; i < n; i++){
+        fprintf(f,"%d\n",t[i]);
+    }
+    fclose(f);
+}
+
+
 
 
 int main(int argc, char* argv[]){
@@ -65,8 +80,13 @@ int main(int argc, char* argv[]){
     printf("check1\n");
     fclose(f);
     clock_t t1 = clock();
-    maxpearson_partialauto<double,int>(ts,m,m);
+    stridedbuf<double> mp(ts.len-m+1);
+    stridedbuf<int>mpi(ts.len-m+1);
+    maxpearson_partialauto<double,int>(ts,mp,mpi,m,m);
+    writeDoubles("mp",mp.dat,n-m+1);
+    writeInts("mpi",mpi.dat,n-m+1);
     clock_t t2 = clock();
-    printf("time: %lu\n",t2-t1);
+    printf("REACHES\n");
+    printf("time: %lf\n",static_cast<double>((t2-t1))/CLOCKS_PER_SEC);
     return 0;
 }

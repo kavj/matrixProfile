@@ -15,25 +15,28 @@
 
 
 template<typename dtype, typename itype>
-int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int sublen){
+void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stridedbuf<itype>& mpi, int minlag, int sublen){
    // allocate query buffers, basically covariance and normalized query
    if(!ts.isvalid()){
       printf("invalid time series\n");
    }
    int mlen = ts.len - sublen + 1;
-   const int tlen = std::max(4*sublen,65536);
+   const int tlen = std::max(paddedlen(4*sublen,prefalign),16384); // this should incorporate the overall size
    int tilesperdim = (mlen-minlag)/tlen; // find max tiles in 1 direction
    int taillen = mlen - minlag - tlen*tilesperdim;
    if(taillen > 0){
       tilesperdim++;
+      printf("%d tiles per dim\n",tilesperdim);
    }
 
    stridedbuf<dtype>mu(mlen); stridedbuf<dtype>invn(mlen); stridedbuf<dtype>df(mlen);  stridedbuf<dtype>dg(mlen);
-   stridedbuf<dtype>mp(mlen); stridedbuf<dtype>cov(mlen);  stridedbuf<itype>mpi(mlen); stridedbuf<dtype>q(tilesperdim,sublen);
+   stridedbuf<dtype>q(tilesperdim,sublen); stridedbuf<dtype>cov(mlen);
+
+   //stridedbuf<dtype>mp(mlen); stridedbuf<dtype>cov(mlen);  stridedbuf<itype>mpi(mlen); stridedbuf<dtype>q(tilesperdim,sublen);
 
    if(!(q.isvalid() && cov.isvalid() && mu.isvalid() && invn.isvalid() && df.isvalid()  && dg.isvalid() && mp.isvalid() && mpi.isvalid())){
       printf("could not assign objects\n");
-      return 0;
+      return;
    } 
   
    ts.setstride(tlen), mu.setstride(tlen), df.setstride(tlen), dg.setstride(tlen), invn.setstride(tlen),
@@ -43,9 +46,8 @@ int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int sublen){
 
    xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
    init_dfdx(ts(0), mu(0), df(0), dg(0),sublen,ts.len);
-   std::fill(mp(0),mp(0)+mp.len,-1.0);
-   std::fill(mpi(0),mpi(0)+mpi.len,-1); 
-
+   std::fill(mp(0),mp(0)+mlen,-1.0);
+   std::fill(mpi(0),mpi(0)+mlen,-1); 
 
    const int tcount = ts.len/tlen;  
    #pragma omp parallel for
@@ -56,10 +58,13 @@ int maxpearson_partialauto(stridedbuf<dtype>& ts, int minlag, int sublen){
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
          int offset = (i+j)*tlen;
-         batchcov(ts(j),cov(j),q(j),mu(i+j),tlen,sublen);
-         int upperbound = std::min(2*tlen,mlen-minlag-(i+j)*tlen);
+         int upperbound = std::min(tlen,mlen-minlag-(i+j)*tlen);
+         batchcov(ts(i+j),cov(j),q(j),mu(j),upperbound,sublen);
+         upperbound = std::min(2*tlen,mlen-minlag-(i+j)*tlen);
          pauto_pearson(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag,upperbound);
+         printf("%lf %d\n",mp(j)[0],mpi(j)[0]);
       }
    }
+   printf("reaches\n");
 }
  

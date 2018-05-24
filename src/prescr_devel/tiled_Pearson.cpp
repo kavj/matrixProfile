@@ -1,5 +1,6 @@
+#include<cstdio>
 #include<algorithm>
-#define klen 32 
+#define klen 64 
 
 
 static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
@@ -19,6 +20,7 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
     dg =   (const double*)__builtin_assume_aligned(dg,32);
     invn = (const double*)__builtin_assume_aligned(invn,32);
 
+    
     for(int i = 0; i < klen; i++){
       for(int j = 0; j < klen; j++){
          cov[j] += dg[i]*df[i+j+offsetc];
@@ -29,9 +31,9 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
          corr[j] = cov[j]*invn[i]*invn[i+j+offsetc];
       }
       for(int j = 0; j < klen; j++){
-         if(mp[i] < corr[j]){
-            mp[i] = corr[j];
-            mpi[i] = i+j+offsetr+offsetc;
+         if(mp[j] < corr[j]){
+            mp[j] = corr[j];
+            mpi[j] = i+j+offsetr+offsetc;
          }
       }
       for(int j = 0; j < klen; j++){
@@ -108,8 +110,8 @@ void pauto_pearson(
    df =   (const double*)__builtin_assume_aligned(df,32);
    dg =   (const double*)__builtin_assume_aligned(dg,32);
    invn = (const double*)__builtin_assume_aligned(invn,32);
-   
-   if(upperbound == 2*tlen){
+
+   if(upperbound >= 2*tlen){
       for(int i = 0; i < tlen; i+= klen){
          for(int j = 0; j < tlen; j += klen){
             pauto_pearson_refkern(cov+i,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc+i);
