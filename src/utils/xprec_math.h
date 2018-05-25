@@ -5,7 +5,6 @@
 // ACCURATE SUM AND DOT PRODUCT Ogita et al
 
 
-// Todo: unwind the inline functions in place as I don't care for the reference passing here
 
 template<typename dtype>
 static inline void xadd (dtype& a, dtype& b){
@@ -69,7 +68,8 @@ void xsInv(dtype *a, dtype *mu, dtype *sI, int len, int winlen){
 
 // move to cython layer 
 template<typename dtype>
-void init_dfdx(dtype *a, dtype* mu, dtype *df, dtype *dx, int w, int n){
+void init_dfdx(const dtype* __restrict__ a,const dtype* __restrict__ mu, dtype* __restrict__ df, dtype* __restrict__ dx, int w, int n){
+   
    df[0] = 0; 
    dx[0] = 0;
    for(int i = 0; i < n-w; i++){

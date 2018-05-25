@@ -30,7 +30,7 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    int taillen = mlen - minlag - tlen*tilesperdim;
 
    if(taillen > 0){
-      tilesperdim++;
+      ++tilesperdim;
    }
 
    stridedbuf<dtype>mu(mlen); stridedbuf<dtype>invn(mlen); stridedbuf<dtype>df(mlen);  stridedbuf<dtype>dg(mlen);
@@ -46,22 +46,24 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
 
    xmean_windowed(ts(0),mu(0),ts.len,sublen);
    xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
-   
-//   fast_invcn(invn(0),ts(0),mu(0),len,sublen);
    init_dfdx(ts(0), mu(0), df(0), dg(0),sublen,ts.len);
-
    std::fill(mp(0),mp(0)+mlen,-1.0);
    std::fill(mpi(0),mpi(0)+mlen,-1); 
+   writeDoubles("testoutputs/df_zz",df(0),mlen);
+   writeDoubles("testoutputs/dg_zz",dg(0),mlen);
+   writeDoubles("testoutputs/invn_zz",invn(0),mlen);
+   writeDoubles("testoutputs/mu_zz", mu(0),mlen);
 
    #pragma omp parallel for
    for(int i = 0; i < tilesperdim; i++){
       center_query(ts(i), mu(i), q(i), sublen);
-   }
-  
+   } 
+ 
    for(int i = 0; i < tilesperdim; i++){
       // this should contain a check for if ! last iteration
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
+         printf("i: %d j: %d\n",i,j);
          int mx = mlen-minlag-(i+j)*tlen;
          int maxperdim = mx > tlen ? tlen : mx;
          int upperbound = mx > 2*tlen ? 2*tlen : mx;
