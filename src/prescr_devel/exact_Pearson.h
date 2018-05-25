@@ -23,10 +23,12 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    if(!ts.isvalid()){
       printf("invalid time series\n");
    }
+
    int mlen = ts.len - sublen + 1;
    const int tlen = std::max(paddedlen(4*sublen,prefalign),16384*8); // this should incorporate the overall size
    int tilesperdim = (mlen-minlag)/tlen; // find max tiles in 1 direction
    int taillen = mlen - minlag - tlen*tilesperdim;
+
    if(taillen > 0){
       tilesperdim++;
    }
@@ -54,13 +56,14 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    }
   
    for(int i = 0; i < tilesperdim; i++){
+      // this should contain a check for if ! last iteration
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
-         int offset = (i+j)*tlen;
-         int upperbound = std::min(tlen,mlen-minlag-(i+j)*tlen);
-         batchcov_ref(ts(i+j)+minlag,cov(j),q(j),mu(j),upperbound,sublen);
-         upperbound = std::min(2*tlen,mlen-minlag-(i+j)*tlen);
-         pauto_pearson(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag,upperbound);
+         int maxperdim = (mlen-minlag-(i+j)*tlen) < tlen ? (mlen-minlag-(i+j)*tlen) : tlen;
+         int upperbound = maxperdim >= 2*tlen ? 2*tlen : maxperdim;
+         batchcov_ref(ts(i+j)+minlag,cov(j),q(j),mu(j),maxperdim,sublen);
+         appendDoubles("cov_t",cov(j),upperbound);
+         pauto_pearson(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),maxperdim,j*tlen,i*tlen+minlag,upperbound);
       }
    }
 }

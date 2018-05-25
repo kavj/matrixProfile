@@ -89,7 +89,6 @@ static inline void pauto_pearson_edgekern(
 }
 
 //Todo: make preambles compiler agnostic
-// Combine these two functions. Use initial check
 
 
 // offsetr indicates the amount which we have already offset all pointers other than cov from their base values
