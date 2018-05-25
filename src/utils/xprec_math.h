@@ -7,19 +7,20 @@
 
 // Todo: unwind the inline functions in place as I don't care for the reference passing here
 
-auto xadd = [&] (auto a, auto b){
-   auto c = a + b;
-   auto d = c - a;
+template<typename dtype>
+static inline void xadd (dtype& a, dtype& b){
+   dtype c = a + b;
+   dtype d = c - a;
    b = ((a - (c - d)) + (b - d));
    a = c;
-};
+}
 
-
-auto xmul = [&] (auto a, auto b){
-   auto c = a*b;
+template<typename dtype>
+static inline void xmul (dtype &a, dtype& b){
+   dtype c = a*b;
    b = fma(a,b,-1*c);
    a = c;
-};
+}
 
 
 template<typename dtype>
@@ -34,18 +35,17 @@ void fast_invcn(dtype* __restrict__ invn, const dtype* __restrict__ ts, const dt
       dtype b = ts[i+sublen-1];
       dtype c = ts[i-1];
       a += ((b - mu[i+sublen-1]) + (c - mu[i-1])) * (b - c); 
-      invn[i-sublen+1] = sqrt(1.0/a);
+      invn[i-sublen+1] = 1.0/sqrt(a);
    }
 }
 
 
 template<typename dtype>
-dtype invn(dtype *a, dtype *mu, dtype *sI, int offset, int winlen){
-   dtype z = mu[offset];
-   dtype p = a[offset] - z;
+dtype invcn(dtype *a,dtype *sI, dtype z, int winlen){
+   dtype p = a[0] - z;
    dtype s = p;
    xmul(p,s);
-   for(int j = offset + 1; j < offset+winlen; j++){
+   for(int j = 1; j < winlen; j++){
        dtype h = a[j] - z;
        dtype r = h;
        xmul(h,r);
@@ -63,7 +63,7 @@ void xsInv(dtype *a, dtype *mu, dtype *sI, int len, int winlen){
    int k = len - winlen + 1;
    #pragma omp parallel for
    for(int i = 0; i < k; i++){
-      sI[i] = invn(a,mu,sI,i,winlen);
+      sI[i] = invcn(a+i,sI+i,mu[i],winlen);
    }
 }
 
