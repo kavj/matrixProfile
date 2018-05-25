@@ -20,8 +20,9 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
     dg =   (const double*)__builtin_assume_aligned(dg,32);
     invn = (const double*)__builtin_assume_aligned(invn,32);
 
-    // iteration order is effectively reversed here to avoid dependent operations
-    // We should swap variable names for consistency
+    // Note this goes by row then diagonal/column, so the inner block 
+    // determines the column. This messes with our normal variable naming convention 
+    // it's necessary so that values of cov may be updated independently
 
     for(int i = 0; i < klen; i++){
       for(int j = 0; j < klen; j++){
@@ -33,15 +34,15 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
          corr[j] = cov[j]*invn[i]*invn[i+j+offsetc];
       }
       for(int j = 0; j < klen; j++){
-         if(mp[j] < corr[j]){
-            mp[j] = corr[j];
-            mpi[j] = i+j+offsetr+offsetc;
+         if(mp[i] < corr[j]){
+            mp[i] = corr[j];
+            mpi[i] = i+j+offsetr+offsetc;
          }
       }
       for(int j = 0; j < klen; j++){
          if(mp[i+j+offsetc] < corr[j]){
             mp[i+j+offsetc] = corr[j];
-            mpi[i+j+offsetc] = j+offsetr;
+            mpi[i+j+offsetc] = i+offsetr;
          }
       }
    }
@@ -129,5 +130,34 @@ void pauto_pearson(
    }
 }
 
+
+
+void pauto_pearson_reftest(
+   double*       __restrict__ cov,
+   double*       __restrict__ mp,
+   int*          __restrict__ mpi,
+   const double* __restrict__ df,
+   const double* __restrict__ dg,
+   const double* __restrict__ invn,
+   int minlag,
+   int mlen)
+{
+
+   for(int i = minlag; i < mlen; i++){
+      for(int j = 0; j < mlen-i; j++){
+         cov[i] += df[j]*dg[i+j];
+         cov[i] += df[i+j]*dg[j];
+         double corr = cov[i]*invn[j]*invn[i+j];
+         if(mp[j] < corr){
+            mp[j] = corr;
+            mpi[j] = i+j;
+         }
+         if(mp[i+j] < corr){
+            mp[i+j] = corr;
+            mpi[i+j] = i;
+         }
+      }
+   }
+}
 
 
