@@ -20,7 +20,9 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
     dg =   (const double*)__builtin_assume_aligned(dg,32);
     invn = (const double*)__builtin_assume_aligned(invn,32);
 
-    
+    // iteration order is effectively reversed here to avoid dependent operations
+    // We should swap variable names for consistency
+
     for(int i = 0; i < klen; i++){
       for(int j = 0; j < klen; j++){
          cov[j] += dg[i]*df[i+j+offsetc];
@@ -51,7 +53,7 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
 static inline void pauto_pearson_edgekern(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
-   int*    __restrict__ mpi, 
+   int*          __restrict__ mpi, 
    const double* __restrict__ df,  
    const double* __restrict__ dg, 
    const double* __restrict__ invn, 
@@ -70,7 +72,6 @@ static inline void pauto_pearson_edgekern(
    int dlim = std::min(klen,bound);
    for(int i = 0; i < dlim; i++){
       double c = cov[i];
-      // make tighter bound later
       for(int j = i; j < bound-i; j++){
          c += df[j]*dg[j+offsetc];
          c += df[j+offsetc]*dg[j];
