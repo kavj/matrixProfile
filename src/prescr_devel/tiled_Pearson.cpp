@@ -55,7 +55,6 @@ static inline void pauto_pearson_edgekern(
    const double* __restrict__ df,  
    const double* __restrict__ dg, 
    const double* __restrict__ invn, 
-   int tlen_t,
    int offsetr, 
    int offsetc, 
    int bound)
@@ -68,12 +67,11 @@ static inline void pauto_pearson_edgekern(
     invn = (const double*)__builtin_assume_aligned(invn,32);
 
  
-   int dlim = std::min(tlen_t,bound);
+   int dlim = std::min(klen,bound);
    for(int i = 0; i < dlim; i++){
       double c = cov[i];
       // make tighter bound later
-      int clim = std::min(bound-i,tlen_t);
-      for(int j = i; j < clim; j++){
+      for(int j = i; j < bound-i; j++){
          c += df[j]*dg[j+offsetc];
          c += df[j+offsetc]*dg[j];
          double corr = c*invn[i]*invn[i+j];
@@ -86,11 +84,18 @@ static inline void pauto_pearson_edgekern(
             mpi[j+offsetc] = j+offsetr;
          }
       }
+      cov[i] = c;
    }
 }
 
 //Todo: make preambles compiler agnostic
 // Combine these two functions. Use initial check
+
+
+// offsetr indicates the amount which we have already offset all pointers other than cov from their base values
+// offsetc indicates the amount which we have offset cov from its base value
+// Since we require 2 values from mp,mpi,df,dg,invn per update, we apply offsetc as needed to index calculations.
+
 
 void pauto_pearson(
    double*       __restrict__ cov,
@@ -111,26 +116,18 @@ void pauto_pearson(
    dg =   (const double*)__builtin_assume_aligned(dg,32);
    invn = (const double*)__builtin_assume_aligned(invn,32);
 
-   if(upperbound >= 2*tlen){
-      for(int i = 0; i < tlen; i+= klen){
-         for(int j = 0; j < tlen; j += klen){
-            pauto_pearson_refkern(cov+i,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc+i);
-         }
+   int rmx = (upperbound == 2*tlen) ? tlen : std::min(upperbound,tlen);
+   for(int i = 0; i < rmx; i+= klen){
+      int cmx = std::min(upperbound - i, tlen);
+      int alignmx = cmx - cmx%klen;
+      for(int j = 0; j < alignmx; j += klen){
+         pauto_pearson_refkern(cov+i,mp+j,mpi+j,df+j,dg+j,invn+j,offsetr+j,offsetc+i);
       }
-   }
-   else{
-      int imx = std::min(upperbound,tlen);
-      for(int i = 0; i < imx; i += klen){
-         int cmx = std::min(upperbound - i, tlen);
-         int alignmx = cmx - cmx%klen;
-         for(int j = 0; j < alignmx; j += klen){
-            pauto_pearson_refkern(cov+i,mp+j,mpi+j,invn+j,df+j,dg+j,offsetr+j,offsetc+i);
-         }
-         if(cmx < alignmx){
-            pauto_pearson_edgekern(cov+i, mp+alignmx, mpi+alignmx, df+alignmx, dg+alignmx, invn+alignmx, klen, offsetr+alignmx, offsetc+i, upperbound);
-         }
+      if(cmx != alignmx){
+         pauto_pearson_edgekern(cov+i, mp+alignmx, mpi+alignmx, df+alignmx, dg+alignmx, invn+alignmx, offsetr+alignmx, offsetc+i, cmx-alignmx);
       }
    }
 }
+
 
 

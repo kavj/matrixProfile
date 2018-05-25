@@ -59,7 +59,6 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
          int offset = (i+j)*tlen;
          int upperbound = std::min(tlen,mlen-minlag-(i+j)*tlen);
          batchcov_ref(ts(i+j)+minlag,cov(j),q(j),mu(j),upperbound,sublen);
-         double* c = cov(j);
          upperbound = std::min(2*tlen,mlen-minlag-(i+j)*tlen);
          pauto_pearson(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag,upperbound);
       }
