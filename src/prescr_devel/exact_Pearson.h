@@ -25,7 +25,7 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    }
 
    int mlen = ts.len - sublen + 1;
-   const int tlen = std::max(paddedlen(4*sublen,prefalign),16384*8); // this should incorporate the overall size
+   const int tlen = std::max(paddedlen(4*sublen,prefalign),131072); // this should incorporate the overall size
    int tilesperdim = (mlen-minlag)/tlen; // find max tiles in 1 direction
    int taillen = mlen - minlag - tlen*tilesperdim;
 
@@ -46,7 +46,10 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
 
    xmean_windowed(ts(0),mu(0),ts.len,sublen);
    xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
+   
+//   fast_invcn(invn(0),ts(0),mu(0),len,sublen);
    init_dfdx(ts(0), mu(0), df(0), dg(0),sublen,ts.len);
+
    std::fill(mp(0),mp(0)+mlen,-1.0);
    std::fill(mpi(0),mpi(0)+mlen,-1); 
 
@@ -59,10 +62,10 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
       // this should contain a check for if ! last iteration
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
-         int maxperdim = (mlen-minlag-(i+j)*tlen) < tlen ? (mlen-minlag-(i+j)*tlen) : tlen;
-         int upperbound = maxperdim >= 2*tlen ? 2*tlen : maxperdim;
+         int mx = mlen-minlag-(i+j)*tlen;
+         int maxperdim = mx > tlen ? tlen : mx;
+         int upperbound = mx > 2*tlen ? 2*tlen : mx;
          batchcov_ref(ts(i+j)+minlag,cov(j),q(j),mu(j),maxperdim,sublen);
-         appendDoubles("cov_t",cov(j),upperbound);
          pauto_pearson(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),maxperdim,j*tlen,i*tlen+minlag,upperbound);
       }
    }

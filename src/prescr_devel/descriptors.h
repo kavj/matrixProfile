@@ -10,7 +10,6 @@
 // rearrange attributes
 static inline int   __attribute__((always_inline)) paddedlen(int buflen, int alignmt){return buflen + (buflen%alignmt ? alignmt - buflen%alignmt : 0);}
 
-
 //I would prefer to avoid the use of late binding object types here due to the use of templating to overload precision of datatypes. This will probably be sufficient.
 
 template<typename dtype> struct stridedbuf{
@@ -67,7 +66,4 @@ template<typename dtype> struct stridedbuf{
    
 };
 
-
-
 #endif
-
