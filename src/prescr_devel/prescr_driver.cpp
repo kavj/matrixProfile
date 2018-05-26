@@ -43,8 +43,7 @@ int main(int argc, char* argv[]){
     maxpearson_partialauto<double,int>(ts,mp,mpi,m,m);
     printf("check2\n");
     writeDoubles("testoutputs/mp",mp.dat,n-m+1);
-    writeLongs("testouptuts/mpi_long",mpi.dat,n-m+1);
-  //  writeInts("testoutputs/mpi",mpi.dat,n-m+1);
+    writeInts("testoutputs/mpi",mpi.dat,n-m+1);
     clock_t t2 = clock();
     printf("time: %lf\n",static_cast<double>((t2-t1))/CLOCKS_PER_SEC);
     return 0;
