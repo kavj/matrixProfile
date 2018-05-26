@@ -36,14 +36,15 @@ int main(int argc, char* argv[]){
     for(int i = 0; i < n; i++){
        fscanf(f,"%lf\n",t+i);
     }
-    printf("check1\n");
     fclose(f);
     clock_t t1 = clock();
     stridedbuf<double> mp(ts.len-m+1);
     stridedbuf<int>mpi(ts.len-m+1);
     maxpearson_partialauto<double,int>(ts,mp,mpi,m,m);
-    writeDoubles("mp",mp.dat,n-m+1);
-    writeInts("mpi",mpi.dat,n-m+1);
+    printf("check2\n");
+    writeDoubles("testoutputs/mp",mp.dat,n-m+1);
+    writeLongs("testouptuts/mpi_long",mpi.dat,n-m+1);
+  //  writeInts("testoutputs/mpi",mpi.dat,n-m+1);
     clock_t t2 = clock();
     printf("time: %lf\n",static_cast<double>((t2-t1))/CLOCKS_PER_SEC);
     return 0;
