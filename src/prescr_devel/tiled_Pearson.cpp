@@ -189,10 +189,10 @@ void pauto_pearson(
    int fringe = 0;
 
    if(mlen - tilesperdim*tlen - minlag > 0){
-      ++tilesperdim;
       int taillen = mlen - tilesperdim*tlen - minlag;      
       fringe = taillen%klen;
       tailkcount = (taillen - fringe)/klen;
+      ++tilesperdim;
    }
 
    stridedbuf<double> q(tlen,tilesperdim);
@@ -242,7 +242,7 @@ void pauto_pearson(
    }
 }
 
-
+/*
 void pauto_pearson(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
@@ -274,7 +274,7 @@ void pauto_pearson(
          //   pauto_pearson_edgekern(cov+i, mp+alignmx, mpi+alignmx, df+alignmx, dg+alignmx, invn+alignmx, offsetr+alignmx, offsetc+i, cmx-alignmx);
       }
    }
-}
+}*/
 
 
 
