@@ -1,7 +1,9 @@
-#include<cstdio>
 #include<algorithm>
 #include "../utils/max_reduce.h"
 #include "../utils/reg.h"
+#include "../utils/cov.h"
+#include "descriptors.h"
+//#define prefalign 32 
 #define klen 64 
 #define step 32
 #define unroll 8
@@ -95,7 +97,7 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
          corr[j] = cov[j]*invn[i+j+offsetc];
       }
       for(int j = 0; j < klen; j++){
-         corr[j] *= invn[i];;
+         corr[j] *= invn[i];
       }
       for(int j = 0; j < klen; j++){
          if(mp[i] < corr[j]){
@@ -157,9 +159,88 @@ static inline void pauto_pearson_edgekern(
 //Todo: make preambles compiler agnostic
 
 
-// offsetr indicates the amount which we have already offset all pointers other than cov from their base values
-// offsetc indicates the amount which we have offset cov from its base value
-// Since we require 2 values from mp,mpi,df,dg,invn per update, we apply offsetc as needed to index calculations.
+
+void pauto_pearson(
+  double*       __restrict__ cov,
+   double*       __restrict__ mp,
+   int*          __restrict__ mpi,
+   const double* __restrict__ ts,
+   const double* __restrict__ mu,
+   const double* __restrict__ df,
+   const double* __restrict__ dg,
+   const double* __restrict__ invn,
+   const int mlen,
+   const int sublen,
+   const int minlag)
+{
+   mu  = (double*) __builtin_assume_aligned(mu,prefalign);
+   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
+   mp =   (double*)__builtin_assume_aligned(mp,prefalign);
+   mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
+   invn = (const double*)__builtin_assume_aligned(invn,prefalign);
+
+   const int tlen = 65536; // add in dynamic formula later
+   const int kcount = tlen/klen;
+   int tilesperdim = (mlen-minlag)/tlen;
+   int tailkcount = 0;
+   //int taillen = 0;
+   int fringe = 0;
+
+   if(mlen - tilesperdim*tlen - minlag > 0){
+      ++tilesperdim;
+      int taillen = mlen - tilesperdim*tlen - minlag;      
+      fringe = taillen%klen;
+      tailkcount = (taillen - fringe)/klen;
+   }
+
+   stridedbuf<double> q(tlen,tilesperdim);
+
+   #pragma omp parallel for
+   for(int i = 0; i < tilesperdim; i++){
+      center_query(ts+i*tlen, mu[i*tlen], q(i), sublen);
+   }
+
+   for(int d = 0; d < tilesperdim; d += tlen){
+      #pragma omp parallel for
+      for(int r = 0; r < tilesperdim - d; r += tlen){
+         if(d + r + 2 < tilesperdim){
+            // init normal
+            // so how are we going to deal with the first row annoyance?
+            for(int sd = 0; sd < kcount; sd++){
+               for(int sr = 0; sr < kcount; sr++){
+                  //pauto_pearson_kern();
+               }
+            }
+         }
+         else{   
+            // figure out if standard initialization is possible
+            int salign = (tilesperdim - d - r - 1)*kcount + tailcount;
+            if(salign > kcount){
+               // normal initialization then cap it to kcount
+               salign = kcount;
+            }
+            else{
+               
+            }
+            //salign = std::min(salign,kcount);
+            for(int sd = 0; sd < kcount; sd++){
+               int ralign = kcount + std::min(0,tailkcount-sd);
+               for(int sr = 0; sr < ralign; sr++){
+                  
+               }
+               if((fringe > 0) && (ralign < kcount)){  
+                  // edge_kern();
+               }
+            }
+            if((fringe > 0) && (salign < kcount)){
+               // edge_kern();
+            }
+         }
+      }
+   }
+}
 
 
 void pauto_pearson(
@@ -186,47 +267,15 @@ void pauto_pearson(
       int cmx = std::min(upperbound - i, tlen);
       int alignmx = cmx - cmx%klen;
       for(int j = 0; j < alignmx; j += klen){
-        pauto_pearson_AVX_kern(cov+i,mp+j,mpi+j,df+j,dg+j,invn+j,offsetr+j,offsetc+i); 
-       // pauto_pearson_refkern(cov+i,mp+j,mpi+j,df+j,dg+j,invn+j,offsetr+j,offsetc+i);
-      }
-      if(cmx != alignmx){
-      //   pauto_pearson_edgekern(cov+i, mp+alignmx, mpi+alignmx, df+alignmx, dg+alignmx, invn+alignmx, offsetr+alignmx, offsetc+i, cmx-alignmx);
-      }
-   }
-}
-
-void pauto_pearson(
-   double*       __restrict__ cov,
-   double*       __restrict__ mp,
-   int*    __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
-   const int tlen,
-   const int offsetr,
-   const int offsetc,
-   const int upperbound)
-{
-   cov =  (double*)__builtin_assume_aligned(cov,32);
-   mp =   (double*)__builtin_assume_aligned(mp,32);
-   mpi =  (int*)__builtin_assume_aligned(mpi,32);
-   df =   (const double*)__builtin_assume_aligned(df,32);
-   dg =   (const double*)__builtin_assume_aligned(dg,32);
-   invn = (const double*)__builtin_assume_aligned(invn,32);
-
-   int rmx = (upperbound == 2*tlen) ? tlen : std::min(upperbound,tlen);
-   for(int i = 0; i < rmx; i+= klen){
-      int cmx = std::min(upperbound - i, tlen);
-      int alignmx = cmx - cmx%klen;
-      for(int j = 0; j < alignmx; j += klen){
-       // pauto_pearson_AVX_kern(cov+i,mp+j,mpi+j,df+j,dg+j,invn+j,offsetr+j,offsetc+i); 
+         // pauto_pearson_AVX_kern(cov+i,mp+j,mpi+j,df+j,dg+j,invn+j,offsetr+j,offsetc+i); 
          pauto_pearson_refkern(cov+i,mp+j,mpi+j,df+j,dg+j,invn+j,offsetr+j,offsetc+i);
       }
       if(cmx != alignmx){
-         pauto_pearson_edgekern(cov+i, mp+alignmx, mpi+alignmx, df+alignmx, dg+alignmx, invn+alignmx, offsetr+alignmx, offsetc+i, cmx-alignmx);
+         //   pauto_pearson_edgekern(cov+i, mp+alignmx, mpi+alignmx, df+alignmx, dg+alignmx, invn+alignmx, offsetr+alignmx, offsetc+i, cmx-alignmx);
       }
    }
 }
+
 
 
 void pauto_pearson_reftest(
