@@ -1,9 +1,7 @@
-#include<cstdio>
 #include <algorithm>
 #include <cmath>
 #include "../arch/avx256.h"
 #include "reg.h"
-#include "checkArray.h"
 
 using namespace avx256_t;
 typedef double dtype;
