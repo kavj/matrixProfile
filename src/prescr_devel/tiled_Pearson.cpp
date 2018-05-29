@@ -243,7 +243,7 @@ void pauto_pearson(
    const int tlen = 65536; // add in dynamic formula later
    const int kcount = tlen/klen;
    int tilesperdim = (mlen-minlag)/tlen;
-   int fringe = mlen - tilesperdim*tlen - minlag;
+   int fringe = mlen - minlag - tilesperdim*tlen;
    int tailkcount = kcount;
 
    if(fringe != 0){
@@ -264,71 +264,25 @@ void pauto_pearson(
       for(int r = 0; r < tilesperdim - d; r += tlen){
          bool inner = d + r + 2 < tilesperdim;
          bool aligned_edge = d + r + 2 == tilesperdim;
-         int sdmx = (inner | aligned_edge) ? kcount : tailkcount;
-         if(inner || (edge && (tailkcount != 0))){
-            init_normal();
+         int sd_aligned = (inner || aligned_edge) ? kcount : tailkcount;
+         if(inner || (aligned_edge && (tailkcount != 0))){
+            // regular initialization 
          }
          else{
-            init_edge();
+            // use tapered initialization
          }
-         for(int sd = 0; sd < sdmx; sd++){
-            int srmx = 0;
-            if(inner){
-               srmx = kcount;
-            }
-            else if(aligned_edge){
-               srmx = std::min(kcount + tailkcount - sd, kcount);
-            }
-            else{
-               
-            }
+         for(int sd = 0; sd < sd_aligned; sd++){
+            int sr_aligned = (inner || (aligned_edge && (sd <= tailkcount))) ? kcount : tailkcount - sd;
             for(int sr = 1; sr < srmx; sr++){
                pauto_pearson_inner();
             } 
-            if((srmx != kcount) && (fringe != 0)){
+            if((fringe != 0) && !inner && (!aligned_edge || (sd > tailcount)){
                pauto_pearson_edge();
             }
-         }
-         if((sdmx != kcount) && (fringe != 0)){
-            
          }
       }
    }
 }
-
-/*
-void pauto_pearson(
-   double*       __restrict__ cov,
-   double*       __restrict__ mp,
-   long long*    __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
-   const int tlen,
-   const int offsetr,
-   const int offsetc,
-   const int upperbound)
-{
-   cov =  (double*)__builtin_assume_aligned(cov,32);
-   mp =   (double*)__builtin_assume_aligned(mp,32);
-   mpi =  (long long*)__builtin_assume_aligned(mpi,32);
-   df =   (const double*)__builtin_assume_aligned(df,32);
-   dg =   (const double*)__builtin_assume_aligned(dg,32);
-   invn = (const double*)__builtin_assume_aligned(invn,32);
-
-   int rmx = (upperbound == 2*tlen) ? tlen : std::min(upperbound,tlen);
-   for(int i = 0; i < rmx; i+= klen){
-      int cmx = std::min(upperbound - i, tlen);
-      int alignmx = cmx - cmx%klen;
-      for(int j = 0; j < alignmx; j += klen){
-         // pauto_pearson_AVX_kern(cov+i,mp+j,mpi+j,df+j,dg+j,invn+j,offsetr+j,offsetc+i); 
-         pauto_pearson_refkern(cov+i,mp+j,mpi+j,df+j,dg+j,invn+j,offsetr+j,offsetc+i);
-      }
-      if(cmx != alignmx){
-         //   pauto_pearson_edgekern(cov+i, mp+alignmx, mpi+alignmx, df+alignmx, dg+alignmx, invn+alignmx, offsetr+alignmx, offsetc+i, cmx-alignmx);
-      }
-   }
-}*/
 
 
 
