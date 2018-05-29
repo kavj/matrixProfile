@@ -245,20 +245,16 @@ void pauto_pearson(
    int tilesperdim = (mlen-minlag)/tlen;
    int fringe = mlen - minlag - tilesperdim*tlen;
    int tailkcount = kcount;
-
    if(fringe != 0){
       tailkcount = fringe/klen;
       fringe -= tailkcount*klen;
       ++tilesperdim;
    }
-
    stridedbuf<double> q(tlen,tilesperdim);
-
    #pragma omp parallel for
    for(int i = 0; i < tilesperdim; i++){
       center_query(ts+i*tlen, mu+i*tlen, q(i), sublen);
    }
-
    for(int d = 0; d < tilesperdim; d += tlen){
       #pragma omp parallel for
       for(int r = 0; r < tilesperdim - d; r += tlen){
@@ -272,11 +268,11 @@ void pauto_pearson(
             // use tapered initialization
          }
          for(int sd = 0; sd < sd_aligned; sd++){
-            int sr_aligned = (inner || (aligned_edge && (sd <= tailkcount))) ? kcount : tailkcount - sd;
+            int sr_aligned = (inner || (aligned_edge && (sd < tailkcount))) ? kcount : tailkcount - sd;
             for(int sr = 1; sr < srmx; sr++){
                pauto_pearson_inner();
             } 
-            if((fringe != 0) && !inner && (!aligned_edge || (sd > tailcount)){
+            if((fringe != 0) && !(inner || (aligned_edge && (sd < tailcount)))){
                pauto_pearson_edge();
             }
          }
