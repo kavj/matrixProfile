@@ -187,12 +187,12 @@ static inline void pauto_pearson_edgekern(
    int offsetc, 
    int bound)
 {
-    cov =  (double*)__builtin_assume_aligned(cov,prefalign);
-    mp =   (double*)__builtin_assume_aligned(mp,prefalign);
-    mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
-    df =   (const double*)__builtin_assume_aligned(df,prefalign);
-    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
-    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
+   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
+   mp =   (double*)__builtin_assume_aligned(mp,prefalign);
+   mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
+   invn = (const double*)__builtin_assume_aligned(invn,prefalign);
    
  
    int dlim = std::min(klen,bound);
@@ -220,7 +220,7 @@ static inline void pauto_pearson_edgekern(
 
 
 void pauto_pearson(
-  double*       __restrict__ cov,
+   double*       __restrict__ cov,
    double*       __restrict__ mp,
    int*          __restrict__ mpi,
    const double* __restrict__ ts,
@@ -262,24 +262,28 @@ void pauto_pearson(
          bool aligned_edge = d + r + 2 == tilesperdim;
          int sd_aligned = (inner || aligned_edge) ? kcount : tailkcount;
          if(inner || (aligned_edge && (tailkcount != 0))){
-            // regular initialization 
+            batchcov_ref(ts,cov,q(r),mu,count,sublen);
+            int offs = r*tlen;
+            pauto_pearson_refkern_initial(cov+offs,mp+offs,mpi+offs,df+offs,dg+offs,invn+offs,offs,d);
          }
          else{
-            // use tapered initialization
+            int count = aligned_edge ? kcount : tailkcount;
+            batchcov_ref(ts,cov,q(r),mu,count,sublen);
+            int bound;
+            pauto_pearson_edge_initial(cov+offs,mp+offs,mpi+offs,df+offs,dg+offs,invn+offs,offs,d,bound);
          }
          for(int sd = 0; sd < sd_aligned; sd++){
             int sr_aligned = (inner || (aligned_edge && (sd < tailkcount))) ? kcount : tailkcount - sd;
-            for(int sr = 1; sr < srmx; sr++){
-               pauto_pearson_inner();
+            for(int sr = 1; sr < sr_aligned; sr++){
+               pauto_pearson_refkern(cov,mp,mpi,df,dg,invn,r,d);
             } 
-            if((fringe != 0) && !(inner || (aligned_edge && (sd < tailcount)))){
-               pauto_pearson_edge();
+            if(!(inner || (aligned_edge && (sd < tailcount))) && (fringe != 0)){
+               pauto_pearson_edge(cov,mp,mpi,df,dg,invn,r,d,bound);
             }
          }
       }
    }
 }
-
 
 
 void pauto_pearson_reftest(
@@ -292,7 +296,6 @@ void pauto_pearson_reftest(
    int minlag,
    int mlen)
 {
-
    for(int i = minlag; i < mlen; i++){
       for(int j = 0; j < mlen-i; j++){
          cov[i] += df[j]*dg[i+j];
