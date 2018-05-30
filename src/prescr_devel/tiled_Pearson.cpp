@@ -197,11 +197,10 @@ void pauto_pearson(
    for(int d = minlag; d < mlen; d+=tlen){
       #pragma omp parallel for
       for(int r = 0; r < mlen - d; r+=tlen){
-         int sd_mx = std::min(d+tlen,mlen-r);
-         int initcount = std::min(tlen, mlen-r-d);
-         batchcov_ref(ts+r,q(r/tlen),cov+d-minlag,mu+r,initcount,sublen);
+         int sd_mx = d + std::min(tlen,mlen-r-d);
+         batchcov_ref(ts+r,q(r/tlen),cov+d-minlag,mu+r,std::min(tlen,mlen-r-d),sublen);
          for(int sd = d; sd < sd_mx;  sd += klen){
-            int sr_mx = std::min(r+tlen, mlen-r-sd);
+            int sr_mx = r + std::min(tlen,mlen-r-sd);
             if(sd + r + 2*klen <= mlen){
                pauto_pearson_refkern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd);
                for(int sr = r+klen; sr < sr_mx; sr += klen){
