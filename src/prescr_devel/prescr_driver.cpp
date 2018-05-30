@@ -1,6 +1,5 @@
 #include "alloc.h"
 #include<cstdio>
-#include<cstdlib>
 #include<ctime>
 #include "descriptors.h"
 #include "exact_Pearson.h"
@@ -32,7 +31,6 @@ int main(int argc, char* argv[]){
        printf("null pointer returned\n");
        exit(1);
     }  
-    
     for(int i = 0; i < n; i++){
        fscanf(f,"%lf\n",t+i);
     }
@@ -40,8 +38,7 @@ int main(int argc, char* argv[]){
     clock_t t1 = clock();
     stridedbuf<double> mp(ts.len-m+1);
     stridedbuf<int>mpi(ts.len-m+1);
-    maxpearson_partialauto<double,int>(ts,mp,mpi,m,m);
-    printf("check2\n");
+    maxpearson_partialauto(ts,mp,mpi,m,m);
     writeDoubles("testoutputs/mp",mp.dat,n-m+1);
     writeInts("testoutputs/mpi",mpi.dat,n-m+1);
     clock_t t2 = clock();

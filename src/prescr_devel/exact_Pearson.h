@@ -37,7 +37,7 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    std::fill(mp(0),mp(0)+mlen,-1.0);
    std::fill(mpi(0),mpi(0)+mlen,-1); 
    pauto_pearson(cov.dat,mp.dat,mpi.dat,ts.dat,mu.dat,df.dat,dg.dat,invn.dat,mlen,sublen,minlag); 
-
+   printf("reaches\n");
 }
 
 

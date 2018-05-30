@@ -15,6 +15,7 @@
 #define simlen 4
 
 // rename and reorganize later. This should be in a different namespace or compilation unit
+template<bool isinit>
 static inline void  pauto_pearson_AVX_kern (double* __restrict__ cov, double* __restrict__ mp, long long* __restrict__ mpi, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ invn, int offsetr, int offsetc){
    cov = (double*)__builtin_assume_aligned(cov,prefalign);
    df  = (const double*)__builtin_assume_aligned(df,prefalign);
@@ -25,6 +26,7 @@ static inline void  pauto_pearson_AVX_kern (double* __restrict__ cov, double* __
    for(int i = 0; i < klen; i++){
       for(int j = 0; j < klen; j+=step){
          block<__m256d> cov_r;
+         if( (j != 0)){
          for(int k = 0; k < unroll; k++){
             cov_r(k) = aload(cov,simlen*(j+k));
          }
@@ -66,9 +68,9 @@ static inline void  pauto_pearson_AVX_kern (double* __restrict__ cov, double* __
       }
    }
 }
+}
 
-
-template<bool isinitial>
+template <bool isinitial>
 static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
    double*       __restrict__ cov,
    double*       __restrict__ mp,
@@ -117,8 +119,6 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
    }
 }
 
-
-
 template<bool isinitial>
 static  void pauto_pearson_edge_kern(
    double*       __restrict__ cov, 
@@ -141,10 +141,10 @@ static  void pauto_pearson_edge_kern(
    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
    
-   int imx = std::min(bound-offsetr,boundc);
+   int imx = std::min(bound,boundc) - offsetc;
    for(int i = 0; i < imx; i++){
       double c = cov[i];
-      int jmx = std::min(bound-i-offsetc,boundr);
+      int jmx = std::min(bound,boundr) - i - offsetr - offsetc;
       for(int j = 0; j < jmx; j++){
          if(!isinitial || (j != 0)){
             c += df[j]*dg[j+offsetc];
@@ -187,7 +187,8 @@ void pauto_pearson(
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
    const int tlen = 65536; // add in dynamic formula later
-   
+   int counter = 0;   
+   int alignedcounter = 0;
    stridedbuf<double> q(tlen,(mlen-minlag)/tlen);
    
    #pragma omp parallel for
@@ -202,22 +203,29 @@ void pauto_pearson(
          for(int sd = d; sd < sd_mx;  sd += klen){
             int sr_mx = r + std::min(tlen,mlen-r-sd);
             if(sd + r + 2*klen <= mlen){
+               alignedcounter++;
+               //pauto_pearson_AVX_kern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd);
                pauto_pearson_refkern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd);
                for(int sr = r+klen; sr < sr_mx; sr += klen){
                   if(sd + sr + 2*klen <= mlen){
                      pauto_pearson_refkern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd);
+                     alignedcounter++;
+                     //pauto_pearson_AVX_kern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd);
                   }
                   else{
+                     counter++;
                      pauto_pearson_edge_kern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd,sr_mx,sd_mx,mlen); 
                   }
                }
             }
             else{
+               counter++;
                pauto_pearson_edge_kern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd,sr_mx,sd_mx,mlen);
             }
          }
       }
    }
+   printf("unaligned:%d  aligned: %d\n",counter,alignedcounter);
 }
 
 
