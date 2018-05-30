@@ -3,6 +3,7 @@
 #include "../utils/reg.h"
 #include "../utils/cov.h"
 #include "descriptors.h"
+#include "../utils/primitive_print_funcs.h"
 #ifdef prefalign
 #undef prefalign
 #endif
@@ -187,8 +188,6 @@ void pauto_pearson(
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
    const int tlen = 65536; // add in dynamic formula later
-   int counter = 0;   
-   int alignedcounter = 0;
    stridedbuf<double> q(tlen,(mlen-minlag)/tlen);
    
    #pragma omp parallel for
@@ -198,34 +197,28 @@ void pauto_pearson(
    for(int d = minlag; d < mlen; d+=tlen){
       #pragma omp parallel for
       for(int r = 0; r < mlen - d; r+=tlen){
-         int sd_mx = d + std::min(tlen,mlen-r-d);
-         batchcov_ref(ts+r,q(r/tlen),cov+d-minlag,mu+r,std::min(tlen,mlen-r-d),sublen);
+         int sd_mx = std::min(tlen,mlen-r-d);
+         batchcov_ref(ts,cov,q(0),mu,sd_mx,sublen); 
+         sd_mx += d;
          for(int sd = d; sd < sd_mx;  sd += klen){
             int sr_mx = r + std::min(tlen,mlen-r-sd);
             if(sd + r + 2*klen <= mlen){
-               alignedcounter++;
-               //pauto_pearson_AVX_kern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd);
                pauto_pearson_refkern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd);
                for(int sr = r+klen; sr < sr_mx; sr += klen){
                   if(sd + sr + 2*klen <= mlen){
                      pauto_pearson_refkern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd);
-                     alignedcounter++;
-                     //pauto_pearson_AVX_kern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd);
                   }
                   else{
-                     counter++;
                      pauto_pearson_edge_kern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd,sr_mx,sd_mx,mlen); 
                   }
                }
             }
             else{
-               counter++;
                pauto_pearson_edge_kern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd,sr_mx,sd_mx,mlen);
             }
          }
       }
    }
-   printf("unaligned:%d  aligned: %d\n",counter,alignedcounter);
 }
 
 
