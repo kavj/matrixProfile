@@ -3,8 +3,13 @@
 #include "../utils/reg.h"
 #include "../utils/cov.h"
 #include "descriptors.h"
+#ifdef prefalign
+#undef prefalign
+#endif
+#define prefalign 32
+
 //#define prefalign 32 
-#define klen 64 
+#define klen 32 
 #define step 32
 #define unroll 8
 #define simlen 4
@@ -63,66 +68,7 @@ static inline void  pauto_pearson_AVX_kern (double* __restrict__ cov, double* __
 }
 
 
-
-static inline  __attribute__((always_inline)) void pauto_pearson_refkern_initial (
-   double*       __restrict__ cov,
-   double*       __restrict__ mp,
-   int*          __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
-   const int offsetr,
-   const int offsetc)
-{
-    cov =  (double*)__builtin_assume_aligned(cov,prefalign);
-    mp =   (double*)__builtin_assume_aligned(mp,prefalign);
-    mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
-    df =   (const double*)__builtin_assume_aligned(df,prefalign);
-    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
-    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
-
-    // Note this goes by row then diagonal/column, so the inner block 
-    // determines the column. This messes with our normal variable naming convention 
-    // it's necessary so that values of cov may be updated independently
-
-   double corr[klen];
-   for(int j = 0; j < klen; j++){
-      corr[j] = cov[j]*invn[j+offsetc];
-   }
-   for(int j = 0; j < klen; j++){
-      corr[j] *= invn[0];
-   }
-   for(int i = 0; i < klen; i++){
-      for(int j = 1; j < klen; j++){
-         cov[j] += dg[i]*df[i+j+offsetc];
-      }
-      for(int j = 1; j < klen; j++){
-         cov[j] += df[i]*dg[i+j+offsetc];
-      } 
-      for(int j = 1; j < klen; j++){
-         corr[j] = cov[j]*invn[i+j+offsetc];
-      }
-      for(int j = 1; j < klen; j++){
-         corr[j] *= invn[i];
-      }
-      for(int j = 1; j < klen; j++){
-         if(mp[i] < corr[j]){
-            mp[i] = corr[j];
-            mpi[i] = i+j+offsetr+offsetc;
-         }
-      }
-      for(int j = 1; j < klen; j++){
-         if(mp[i+j+offsetc] < corr[j]){
-            mp[i+j+offsetc] = corr[j];
-            mpi[i+j+offsetc] = i+offsetr;
-         }
-      }
-   }
-}
-
-
-
-
+template<bool isinitial>
 static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
    double*       __restrict__ cov,
    double*       __restrict__ mp,
@@ -140,16 +86,14 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
     dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
     invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
-    // Note this goes by row then diagonal/column, so the inner block 
-    // determines the column. This messes with our normal variable naming convention 
-    // it's necessary so that values of cov may be updated independently
-
     for(int i = 0; i < klen; i++){
-      for(int j = 0; j < klen; j++){
-         cov[j] += dg[i]*df[i+j+offsetc];
-      }
-      for(int j = 0; j < klen; j++){
-         cov[j] += df[i]*dg[i+j+offsetc];
+      if(!isinitial || (i != 0)){
+         for(int j = 0; j < klen; j++){
+            cov[j] += dg[i]*df[i+j+offsetc];
+         }
+         for(int j = 0; j < klen; j++){
+            cov[j] += df[i]*dg[i+j+offsetc];
+         }
       } 
       double corr[klen];
       for(int j = 0; j < klen; j++){
@@ -174,9 +118,9 @@ static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
 }
 
 
-// annoying discrepancy between int and long long. May need to template these
-// The problem is that int is generally ideal unless long long happens to match the size of a particular mask
-static inline void pauto_pearson_edgekern(
+
+template<bool isinitial>
+static  void pauto_pearson_edge_kern(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    int*          __restrict__ mpi, 
@@ -185,8 +129,11 @@ static inline void pauto_pearson_edgekern(
    const double* __restrict__ invn, 
    int offsetr, 
    int offsetc, 
+   int boundr,
+   int boundc, 
    int bound)
 {
+
    cov =  (double*)__builtin_assume_aligned(cov,prefalign);
    mp =   (double*)__builtin_assume_aligned(mp,prefalign);
    mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
@@ -194,13 +141,15 @@ static inline void pauto_pearson_edgekern(
    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
    
- 
-   int dlim = std::min(klen,bound);
-   for(int i = 0; i < dlim; i++){
+   int imx = std::min(bound-offsetr,boundc);
+   for(int i = 0; i < imx; i++){
       double c = cov[i];
-      for(int j = i; j < bound-i; j++){
-         c += df[j]*dg[j+offsetc];
-         c += df[j+offsetc]*dg[j];
+      int jmx = std::min(bound-i-offsetc,boundr);
+      for(int j = 0; j < jmx; j++){
+         if(!isinitial || (j != 0)){
+            c += df[j]*dg[j+offsetc];
+            c += df[j+offsetc]*dg[j];
+         }
          double corr = c*invn[i]*invn[i+j];
          if(corr > mp[i]){
             mp[j] = corr;
@@ -216,9 +165,6 @@ static inline void pauto_pearson_edgekern(
 }
 
 //Todo: make preambles compiler agnostic
-
-
-
 void pauto_pearson(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
@@ -241,44 +187,34 @@ void pauto_pearson(
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
    const int tlen = 65536; // add in dynamic formula later
-   const int kcount = tlen/klen;
-   int tilesperdim = (mlen-minlag)/tlen;
-   int fringe = mlen - minlag - tilesperdim*tlen;
-   int tailkcount = kcount;
-   if(fringe != 0){
-      tailkcount = fringe/klen;
-      fringe -= tailkcount*klen;
-      ++tilesperdim;
-   }
-   stridedbuf<double> q(tlen,tilesperdim);
+   
+   stridedbuf<double> q(tlen,(mlen-minlag)/tlen);
+   
    #pragma omp parallel for
-   for(int i = 0; i < tilesperdim; i++){
-      center_query(ts+i*tlen, mu+i*tlen, q(i), sublen);
+   for(int i = 0; i < mlen; i+= tlen){
+      center_query(ts+i, mu+i, q(i/tlen), sublen);
    }
-   for(int d = 0; d < tilesperdim; d += tlen){
+   for(int d = minlag; d < mlen; d+=tlen){
       #pragma omp parallel for
-      for(int r = 0; r < tilesperdim - d; r += tlen){
-         bool inner = d + r + 2 < tilesperdim;
-         bool aligned_edge = d + r + 2 == tilesperdim;
-         int sd_aligned = (inner || aligned_edge) ? kcount : tailkcount;
-         if(inner || (aligned_edge && (tailkcount != 0))){
-            batchcov_ref(ts,cov,q(r),mu,count,sublen);
-            int offs = r*tlen;
-            pauto_pearson_refkern_initial(cov+offs,mp+offs,mpi+offs,df+offs,dg+offs,invn+offs,offs,d);
-         }
-         else{
-            int count = aligned_edge ? kcount : tailkcount;
-            batchcov_ref(ts,cov,q(r),mu,count,sublen);
-            int bound;
-            pauto_pearson_edge_initial(cov+offs,mp+offs,mpi+offs,df+offs,dg+offs,invn+offs,offs,d,bound);
-         }
-         for(int sd = 0; sd < sd_aligned; sd++){
-            int sr_aligned = (inner || (aligned_edge && (sd < tailkcount))) ? kcount : tailkcount - sd;
-            for(int sr = 1; sr < sr_aligned; sr++){
-               pauto_pearson_refkern(cov,mp,mpi,df,dg,invn,r,d);
-            } 
-            if(!(inner || (aligned_edge && (sd < tailcount))) && (fringe != 0)){
-               pauto_pearson_edge(cov,mp,mpi,df,dg,invn,r,d,bound);
+      for(int r = 0; r < mlen - d; r+=tlen){
+         int sd_mx = std::min(d+tlen,mlen-r);
+         int initcount = std::min(tlen, mlen-r-d);
+         batchcov_ref(ts+r,q(r/tlen),cov+d-minlag,mu+r,initcount,sublen);
+         for(int sd = d; sd < sd_mx;  sd += klen){
+            int sr_mx = std::min(r+tlen, mlen-r-sd);
+            if(sd + r + 2*klen <= mlen){
+               pauto_pearson_refkern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd);
+               for(int sr = r+klen; sr < sr_mx; sr += klen){
+                  if(sd + sr + 2*klen < mlen){
+                     pauto_pearson_refkern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd);
+                  }
+                  else{
+                     pauto_pearson_edge_kern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd,sr_mx,sd_mx,mlen); 
+                  }
+               }
+            }
+            else{
+               pauto_pearson_edge_kern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd,sr_mx,sd_mx,mlen);
             }
          }
       }
