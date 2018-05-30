@@ -204,7 +204,7 @@ void pauto_pearson(
             if(sd + r + 2*klen <= mlen){
                pauto_pearson_refkern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd);
                for(int sr = r+klen; sr < sr_mx; sr += klen){
-                  if(sd + sr + 2*klen < mlen){
+                  if(sd + sr + 2*klen <= mlen){
                      pauto_pearson_refkern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd);
                   }
                   else{
