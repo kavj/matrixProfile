@@ -17,7 +17,7 @@ void center_query_ref(const dtype* __restrict__ ts, const dtype* __restrict__ mu
    }
 }
 
-void center_query(const dtype* __restrict__ ts, const dtype* __restrict__ mu, dtype* __restrict__ q,  int sublen){
+void center_query(const dtype* __restrict__ ts, const dtype* __restrict__  mu,  dtype* __restrict__ q, int sublen){
    q = (dtype*) __builtin_assume_aligned(q,32);
    const int aligned = sublen - sublen%32; 
    const int unroll = 8;
