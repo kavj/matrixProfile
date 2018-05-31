@@ -192,13 +192,13 @@ void pauto_pearson(
    
    #pragma omp parallel for
    for(int i = 0; i < mlen; i+= tlen){
-      center_query(ts+i, mu+i, q(i/tlen), sublen);
+      center_query_ref(ts+i, mu+i, q(i/tlen), sublen);
    }
    for(int d = minlag; d < mlen; d+=tlen){
       #pragma omp parallel for
       for(int r = 0; r < mlen - d; r+=tlen){
          int sd_mx = std::min(tlen,mlen-r-d);
-         batchcov_ref(ts,cov,q(0),mu,sd_mx,sublen); 
+         batchcov_ref(ts+d+r,cov+d-minlag,q(r/tlen),mu+r,sd_mx,sublen); 
          sd_mx += d;
          for(int sd = d; sd < sd_mx;  sd += klen){
             int sr_mx = r + std::min(tlen,mlen-r-sd);

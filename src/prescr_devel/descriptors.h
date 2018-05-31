@@ -15,7 +15,7 @@ static inline int   __attribute__((always_inline)) paddedlen(int buflen, int ali
 template<typename dtype> struct stridedbuf{
    // This does allow for partial aliasing, which should obviously only be used in the case of pasing read only data structures to different threads
    // If it's externally allocated, then we just want to let it determine the max number of blocks, we can do some minor error checking anyway
-   dtype* dat;
+   dtype* __restrict__ dat;
    int bcount;
    int len;
    int stride;
