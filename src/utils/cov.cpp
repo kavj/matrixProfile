@@ -12,6 +12,8 @@ typedef __m256d vtype;
 //static inline void batchcov_kern(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int offset, int unroll, int sublen) __attribute__ ((always_inline));
 
 void center_query_ref(const dtype* __restrict__ ts, const dtype* __restrict__ mu, dtype* __restrict__ q, int sublen){
+   q = (double*)__builtin_assume_aligned(q,32);
+  
    for(int j = 0; j < sublen; j++){
       q[j] = ts[j] - mu[0];
    }
@@ -50,8 +52,6 @@ void batchcov_ref(const dtype* __restrict__ ts, dtype* cov, const dtype* __restr
    }
 }
 
-//Todo: cleanup edge handling
-//template<typename dtype,typename vtype>
 
 void batchcov(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int count, int sublen){
    cov = (dtype*) __builtin_assume_aligned(cov,32);

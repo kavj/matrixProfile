@@ -10,7 +10,7 @@
 
 
 
-void* init_buffer(int buflen, int alignmt){
+inline void* init_buffer(int buflen, int alignmt){
    double* buf;
    int chk = posix_memalign((void**)(&buf),alignmt,buflen);
    //int chk = posix_memalign((void**)(&buf),64,131072*sizeof(double));

@@ -5,9 +5,10 @@
 #include<cstdlib>
 #include<unistd.h>
 
-void writeDoubles(const char* name, double* t, int n){
+void writeDoubles(const char* name, const double* t, const int n){
     FILE* f = fopen(name,"w");
     if(f == NULL){
+        fprintf(stderr,"error opening %s:  ",name);
         perror("fopen");  
         exit(1);
     }
@@ -17,7 +18,7 @@ void writeDoubles(const char* name, double* t, int n){
     fclose(f);
 }
 
-void appendDoubles(const char* name, double* t, int n){
+void appendDoubles(const char* name, const double* t, const int n){
     FILE* f = fopen(name,"w");
     if(f == NULL){
         perror("fopen");  
@@ -33,7 +34,7 @@ void appendDoubles(const char* name, double* t, int n){
     }
 }
 
-void writeInts(const char* name,  int* t, int n){
+void writeInts(const char* name,const  int* t, const int n){
     FILE* f = fopen(name,"w");
     if(f == NULL){
         perror("fopen");  
@@ -45,7 +46,7 @@ void writeInts(const char* name,  int* t, int n){
     fclose(f);
 }
 
-void writeLongs(const char* name, long long* t, int n){
+void writeLongs(const char* name,const long long* t, const int n){
     FILE* f = fopen(name,"w");
     if(f == NULL){
         perror("fopen");  
