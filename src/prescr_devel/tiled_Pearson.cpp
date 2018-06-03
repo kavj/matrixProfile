@@ -203,7 +203,7 @@ void pauto_pearson_inner(
          for(int sd = d; sd < d+klen; sd++){
             if(mp[r+sd+offsetc] < cov[sd]*invn[r]*invn[r+sd+offsetc]){
                mp[r+sd+offsetc] = cov[sd]*invn[r]*invn[r+sd+offsetc];
-               mpi[r+sd+offsetc] = cov[sd]*invn[r]*invn[r+sd+offsetc];
+               mpi[r+sd+offsetc] = r+offsetr;
             }
          }
       }
