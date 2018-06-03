@@ -1,22 +1,20 @@
 #include<algorithm>
-#include "../utils/max_reduce.h"
+//#include "../utils/max_reduce.h"
 #include "../utils/reg.h"
 #include "../utils/cov.h"
+#include "../utils/xprec_math.h"
 #include "descriptors.h"
 #include "../utils/primitive_print_funcs.h"
 #ifdef prefalign
 #undef prefalign
 #endif
-#define prefalign 32
+#define prefalign 64 
 
 //#define prefalign 32 
-#define klen 32 
-#define step 32
-#define unroll 8
-#define simlen 4
+#define klen 64 
 
 // rename and reorganize later. This should be in a different namespace or compilation unit
-template<bool isinit>
+/*
 static inline void  pauto_pearson_AVX_kern (double* __restrict__ cov, double* __restrict__ mp, long long* __restrict__ mpi, const double* __restrict__ df, const double* __restrict__ dx, const double* __restrict__ invn, int offsetr, int offsetc){
    cov = (double*)__builtin_assume_aligned(cov,prefalign);
    df  = (const double*)__builtin_assume_aligned(df,prefalign);
@@ -69,72 +67,20 @@ static inline void  pauto_pearson_AVX_kern (double* __restrict__ cov, double* __
       }
    }
 }
-}
+}*/
 
-template <bool isinitial>
-static inline  __attribute__((always_inline)) void pauto_pearson_refkern (
-   double*       __restrict__ cov,
-   double*       __restrict__ mp,
-   int*          __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
-   const int offsetr,
-   const int offsetc)
-{
-    cov =  (double*)__builtin_assume_aligned(cov,prefalign);
-    mp =   (double*)__builtin_assume_aligned(mp,prefalign);
-    mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
-    df =   (const double*)__builtin_assume_aligned(df,prefalign);
-    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
-    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
-
-    for(int i = 0; i < klen; i++){
-      if(!isinitial || (i != 0)){
-         for(int j = 0; j < klen; j++){
-            cov[j] += dg[i]*df[i+j+offsetc];
-         }
-         for(int j = 0; j < klen; j++){
-            cov[j] += df[i]*dg[i+j+offsetc];
-         }
-      } 
-      double corr[klen];
-      for(int j = 0; j < klen; j++){
-         corr[j] = cov[j]*invn[i+j+offsetc];
-      }
-      for(int j = 0; j < klen; j++){
-         corr[j] *= invn[i];
-      }
-      for(int j = 0; j < klen; j++){
-         if(mp[i] < corr[j]){
-            mp[i] = corr[j];
-            mpi[i] = i+j+offsetr+offsetc;
-         }
-      }
-      for(int j = 0; j < klen; j++){
-         if(mp[i+j+offsetc] < corr[j]){
-            mp[i+j+offsetc] = corr[j];
-            mpi[i+j+offsetc] = i+offsetr;
-         }
-      }
-   }
-}
-
-template<bool isinitial>
-static  void pauto_pearson_edge_kern(
+void pauto_pearson_edge(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    int*          __restrict__ mpi, 
    const double* __restrict__ df,  
    const double* __restrict__ dg, 
    const double* __restrict__ invn, 
+   int tlen,
    int offsetr, 
    int offsetc, 
-   int boundr,
-   int boundc, 
    int bound)
 {
-
    cov =  (double*)__builtin_assume_aligned(cov,prefalign);
    mp =   (double*)__builtin_assume_aligned(mp,prefalign);
    mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
@@ -142,44 +88,41 @@ static  void pauto_pearson_edge_kern(
    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
    
-   int imx = std::min(bound,boundc) - offsetc;
-   for(int i = 0; i < imx; i++){
-      double c = cov[i];
-      int jmx = std::min(bound,boundr) - i - offsetr - offsetc;
-      for(int j = 0; j < jmx; j++){
-         if(!isinitial || (j != 0)){
-            c += df[j]*dg[j+offsetc];
-            c += df[j+offsetc]*dg[j];
+   for(int d = 0; d < std::min(tlen,bound); d++){
+      if(cov[d]*invn[0]*invn[d+offsetc] > mp[0]){
+         mp[0] = cov[d]*invn[0]*invn[d+offsetc];  
+         mpi[0] = d+offsetr+offsetc;
+      }
+      if(cov[d]*invn[0]*invn[d+offsetc]  > mp[d+offsetc]){
+         mp[d+offsetc] = cov[d]*invn[0]*invn[d+offsetc]; 
+         mpi[d+offsetc] = offsetr;
+      }
+      for(int r = 0; r < std::min(tlen,bound-d); r++){
+         cov[d] += df[r]*dg[r+d+offsetc];
+         cov[d] += df[r+d+offsetc]*dg[r];
+         if(cov[d]*invn[r]*invn[r+d+offsetc] > mp[r]){
+            mp[r] = cov[d]*invn[r]*invn[r+d+offsetc];
+            mpi[r] = r+d+offsetc+offsetr;
          }
-         double corr = c*invn[i]*invn[i+j];
-         if(corr > mp[i]){
-            mp[j] = corr;
-            mpi[j] = j+offsetr+offsetc;
-         }
-         if(corr > mp[i+j+offsetc]){
-            mp[j+offsetc] = corr;
-            mpi[j+offsetc] = j+offsetr;
+         if(cov[d]*invn[r]*invn[r+d+offsetc] > mp[r+d+offsetc]){
+            mp[r+d+offsetc] = cov[d]*invn[r]*invn[r+d+offsetc];
+            mpi[r+d+offsetc] = r+offsetr;
          }
       }
-      cov[i] = c;
    }
 }
 
-//Todo: make preambles compiler agnostic
-void pauto_pearson(
+void pauto_pearson_basic_inner(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    int*          __restrict__ mpi,
-   const double* __restrict__ ts,
-   const double* __restrict__ mu,
    const double* __restrict__ df,
    const double* __restrict__ dg,
    const double* __restrict__ invn,
-   const int mlen,
-   const int sublen,
-   const int minlag)
+   const int tlen,
+   const int offsetr,
+   const int offsetc)
 {
-   mu  = (double*) __builtin_assume_aligned(mu,prefalign);
    cov =  (double*)__builtin_assume_aligned(cov,prefalign);
    mp =   (double*)__builtin_assume_aligned(mp,prefalign);
    mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
@@ -187,34 +130,100 @@ void pauto_pearson(
    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
-   const int tlen = 65536; // add in dynamic formula later
-   stridedbuf<double> q(tlen,(mlen-minlag)/tlen);
-   
-   #pragma omp parallel for
-   for(int i = 0; i < mlen; i+= tlen){
-      center_query_ref(ts+i, mu+i, q(i/tlen), sublen);
+   for(int d = 0; d < tlen; d++){
+      cov[d] += df[0]*dg[d+offsetc];
+      cov[d] += df[d+offsetc]*dg[0];
+      if(mp[0] < cov[d]*invn[0]*invn[d+offsetc]){
+         mp[0] = cov[d]*invn[0]*invn[d+offsetc];
+         mpi[0] = d+offsetr+offsetc;
+      }
+      if(mp[d] < cov[d]*invn[0]*invn[d]){
+         mp[d] = cov[d]*invn[0]*invn[d];
+         mpi[d] = offsetr;
+      }
    }
-   for(int d = minlag; d < mlen; d+=tlen){
-      #pragma omp parallel for
-      for(int r = 0; r < mlen - d; r+=tlen){
-         int sd_mx = std::min(tlen,mlen-r-d);
-         batchcov_ref(ts+d+r,cov+d-minlag,q(r/tlen),mu+r,sd_mx,sublen); 
-         sd_mx += d;
-         for(int sd = d; sd < sd_mx;  sd += klen){
-            int sr_mx = r + std::min(tlen,mlen-r-sd);
-            if(sd + r + 2*klen <= mlen){
-               pauto_pearson_refkern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd);
-               for(int sr = r+klen; sr < sr_mx; sr += klen){
-                  if(sd + sr + 2*klen <= mlen){
-                     pauto_pearson_refkern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd);
-                  }
-                  else{
-                     pauto_pearson_edge_kern<false>(cov+sd-minlag,mp+sr,mpi+sr,df+sr,dg+sr,invn+sr,sr,sd,sr_mx,sd_mx,mlen); 
-                  }
+   for(int r = 0; r < tlen; r++){
+      for(int d = 0; d < tlen; d++){ 
+         cov[d] += df[r]*dg[r+d+offsetc];
+         cov[d] += df[r+d+offsetc]*dg[r];
+         if(mp[r] < cov[d]*invn[r]*invn[r+d+offsetc]){
+            mp[r] = cov[d]*invn[r]*invn[r+d+offsetc];
+            mpi[r] = r+d+offsetr;
+	 }
+	 if(mp[r+d+offsetc] < cov[d]*invn[r]*invn[r+d+offsetc]){
+            mp[r+d+offsetc] = cov[d]*invn[r]*invn[r+d+offsetc];
+            mpi[r+d+offsetc] = r+offsetr;
+         }
+      }
+   }
+}
+
+void pauto_pearson_inner(
+   double*       __restrict__ cov,
+   double*       __restrict__ mp,
+   int*          __restrict__ mpi,
+   const double* __restrict__ df,
+   const double* __restrict__ dg,
+   const double* __restrict__ invn,
+   const int tlen,
+   const int offsetr,
+   const int offsetc)
+{
+   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
+   mp =   (double*)__builtin_assume_aligned(mp,prefalign);
+   mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
+   invn = (const double*)__builtin_assume_aligned(invn,prefalign);
+
+   for(int d = klen; d < tlen; d += klen){
+      for(int sd = d; sd < d+klen; sd++){
+         if(mp[0] < cov[sd]*invn[0]*invn[sd+offsetc]){
+            mp[0] = cov[sd]*invn[0]*invn[sd+offsetc];
+            mpi[0] = sd+offsetc+offsetr;
+         }
+      }
+      for(int sd = d; sd < d+klen; sd++){
+         if(mp[sd+offsetc] < cov[sd]*invn[0]*invn[sd+offsetc]){
+            mp[sd+offsetc] = cov[sd]*invn[0]*invn[sd+offsetc];
+            mpi[sd+offsetc] = offsetr; 
+         }
+      }
+      for(int r = 1; r < klen; r++){
+         for(int sd = d; sd < d+klen; sd++){
+            cov[sd] += df[r]*dg[r+sd+offsetc];
+            cov[sd] += df[r+sd+offsetc]*dg[r];
+         }
+         for(int sd = d; sd < d+klen; sd++){
+            if(mp[r] < cov[sd]*invn[r]*invn[r+sd+offsetc]){
+               mp[r] = cov[sd]*invn[r]*invn[r+sd+offsetc];
+               mpi[r] = r+sd+offsetc+offsetr;
+            }
+         }
+         for(int sd = d; sd < d+klen; sd++){
+            if(mp[r+sd+offsetc] < cov[sd]*invn[r]*invn[r+sd+offsetc]){
+               mp[r+sd+offsetc] = cov[sd]*invn[r]*invn[r+sd+offsetc];
+               mpi[r+sd+offsetc] = cov[sd]*invn[r]*invn[r+sd+offsetc];
+            }
+         }
+      }
+      for(int r = klen; r < tlen; r += klen){
+         for(int sr = r; sr < r+klen; sr++){
+            for(int sd = d; sd < d+klen; sd++){
+               cov[sd] += df[sr]*dg[sr+sd+offsetc];
+               cov[sd] += df[sr+sd+offsetc]*dg[sr];
+            }
+            for(int sd = d; sd < d+klen; sd++){
+               if(mp[sr] < cov[sd]*invn[sr]*invn[sr+sd+offsetc]){
+                  mp[sr] = cov[sd]*invn[sr]*invn[sr+sd+offsetc];
+                  mpi[sr] = sr+sd+offsetc+offsetr;
                }
             }
-            else{
-               pauto_pearson_edge_kern<true>(cov+sd-minlag,mp+r,mpi+r,df+r,dg+r,invn+r,r,sd,sr_mx,sd_mx,mlen);
+            for(int sd = d; sd < d+klen; sd++){
+               if(mp[sr+sd+offsetc] < cov[sd]*invn[sr]*invn[sr+sd+offsetc]){
+                  mp[sr+sd+offsetc] = cov[sd]*invn[sr]*invn[sr+sd+offsetc];
+                  mpi[sr+sd+offsetc] = sr+offsetr;
+               }
             }
          }
       }
@@ -222,6 +231,8 @@ void pauto_pearson(
 }
 
 
+
+/*
 void pauto_pearson_reftest(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
@@ -248,4 +259,4 @@ void pauto_pearson_reftest(
       }
    }
 }
-
+*/
