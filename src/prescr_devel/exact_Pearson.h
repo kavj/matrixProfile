@@ -33,7 +33,9 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
       printf("could not assign objects\n");
       return;
    } 
-  
+
+   ts.setstride(tlen); cov.setstride(tlen); mu.setstride(tlen); df.setstride(tlen); dg.setstride(tlen); invn.setstride(tlen); mp.setstride(tlen); mpi.setstride(tlen);
+ 
    xmean_windowed(ts(0),mu(0),ts.len,sublen);
    xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
    init_dfdx(ts(0), mu(0), df(0), dg(0),sublen,ts.len);
@@ -43,17 +45,14 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    for(int i = 0; i < tilesperdim; i++){
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
-         batchcov_ref(ts(j),cov(j),q(j),mu(j),tlen,sublen);
+         batchcov_ref(ts(j)+minlag,cov(j),q(j),mu(j),tlen,sublen);
          if(i+j+2 < tilesperdim){
-            pauto_pearson_inner(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag);
+            pauto_pearson_basic_inner(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag);
          }
          else{
-            //pauto_pearson_edge(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag,mlen-minlag-(i+j)*tlen);
+            pauto_pearson_edge(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag,mlen-minlag-(i+j)*tlen);
          }
       }
-   }
-   if(tail != 0){
-      //pauto_pearson_edge(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,sublen,j*tlen,i*tlen+minlag,mlen-minlag-(i+j)*tlen);
    }
 }
 

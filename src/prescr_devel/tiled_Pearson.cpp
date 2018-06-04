@@ -69,6 +69,54 @@ static inline void  pauto_pearson_AVX_kern (double* __restrict__ cov, double* __
 }
 }*/
 
+
+/*
+void pauto_pearson_xinner(
+   double*      __restrict__ cov,
+   double*      __restrict__ mpr,
+      int*      __restrict__ mpri,
+   double*      __restrict__ mpc,
+      int*      __restrict__ mpci,
+const double*   __restrict__ df,
+const double*   __restrict__ dg,
+const double*   __restrict__ dx,
+const double*   __restrict__ dy,
+const double*   __restrict__ invnf,
+const double*   __restrict__ invnx,
+int tlen,
+int offsetr,
+int offsetc,
+int bound)
+{
+   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
+   mpr =   (double*)__builtin_assume_aligned(mpr,prefalign);
+   mpri =  (int*)__builtin_assume_aligned(mpri,prefalign);
+   mpc =  (double*) __builtin_assume_aligned(mpc,prefalign);
+   mpci = (int*) __builtin_assume_aligned(mpci,prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
+   dx =   (const double*)__builtin_assume_aligned(dx,prefalign);
+   dy =   (const double*)__builtin_assume_aligned(dy,prefalign);
+   invnf = (const double*)__builtin_assume_aligned(invnf,prefalign);
+   invnx = (const double*)__builtin_assume_aligned(invnx,prefalign);
+    
+   for(int d = 0; d < tlen; d++){
+      if(cov[d]*invnf[0]*invnx[d+offsetc] > mpr[0]){
+         mpr[0] = cov[d]*invnf[0]*invnx[d+offsetc];
+         mpri[0] = d+offsetr+offsetc;
+      }
+      if(cov[d]*invnf[0]*invnx[d+offsetc] > mpc[d+offsetc]){
+         mpc[d] = cov[d]*invnf[0]*invnx[d+offsetc];
+         mpci[d] = offsetr;
+      }
+   }
+   for(int r = 0; r < tlen; r++){
+      
+   }
+
+}
+*/
+
 void pauto_pearson_edge(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
@@ -93,7 +141,7 @@ void pauto_pearson_edge(
          mp[0] = cov[d]*invn[0]*invn[d+offsetc];  
          mpi[0] = d+offsetr+offsetc;
       }
-      if(cov[d]*invn[0]*invn[d+offsetc]  > mp[d+offsetc]){
+      if(cov[d]*invn[0]*invn[d+offsetc] > mp[d+offsetc]){
          mp[d+offsetc] = cov[d]*invn[0]*invn[d+offsetc]; 
          mpi[d+offsetc] = offsetr;
       }
@@ -131,8 +179,6 @@ void pauto_pearson_basic_inner(
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
    for(int d = 0; d < tlen; d++){
-      cov[d] += df[0]*dg[d+offsetc];
-      cov[d] += df[d+offsetc]*dg[0];
       if(mp[0] < cov[d]*invn[0]*invn[d+offsetc]){
          mp[0] = cov[d]*invn[0]*invn[d+offsetc];
          mpi[0] = d+offsetr+offsetc;
@@ -148,7 +194,7 @@ void pauto_pearson_basic_inner(
          cov[d] += df[r+d+offsetc]*dg[r];
          if(mp[r] < cov[d]*invn[r]*invn[r+d+offsetc]){
             mp[r] = cov[d]*invn[r]*invn[r+d+offsetc];
-            mpi[r] = r+d+offsetr;
+            mpi[r] = r+d+offsetr+offsetc;
 	 }
 	 if(mp[r+d+offsetc] < cov[d]*invn[r]*invn[r+d+offsetc]){
             mp[r+d+offsetc] = cov[d]*invn[r]*invn[r+d+offsetc];
@@ -157,6 +203,56 @@ void pauto_pearson_basic_inner(
       }
    }
 }
+
+
+auto accum = [&] (double* cov, const double* df, const double* dg, int coffset, int iters){
+   for(int i = 0; i < iters; i++){
+      cov[i] += df[i]*dg[i+coffset];
+   }
+   for(int i = 0; i < iters; i++){
+      cov[i] += df[i+coffset]*dg[i];
+   }
+};
+
+auto reduce = [&] (double* mp, int* mpi, const double* cov, const double* invn, int roffset, int coffset, int iters){
+   for(int i = 0; i < iters; i++){
+      if(cov[i]*invn[i]*invn[i+coffset] > mp[i]){
+         mp[i] = cov[i]*invn[i]*invn[i+coffset];
+         mpi[i] = i+roffset+coffset;
+      }
+      if(cov[i]*invn[i]*invn[i+coffset] > mp[i]){
+         mp[i+coffset] = cov[i]*invn[i]*invn[i+coffset];
+         mpi[i+coffset] = i+roffset;
+      }
+   }
+};
+
+
+void pauto_pearson_inner_alt(
+   double*       __restrict__ cov,
+   double*       __restrict__ mp,
+   int*          __restrict__ mpi,
+   const double* __restrict__ df,
+   const double* __restrict__ dg,
+   const double* __restrict__ invn,
+   const int tlen,
+   const int offsetr,
+   const int offsetc)
+{
+   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
+   mp =   (double*)__builtin_assume_aligned(mp,prefalign);
+   mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
+   invn = (const double*)__builtin_assume_aligned(invn,prefalign);
+
+   for(int d = klen; d < tlen; d += klen){
+      //reduce(mp,mpi,cov,invn,offsetr,offsetc,1);
+      //accum(cov,df,dg,sd+offsetc,klen-1);
+   }
+}
+
+
 
 void pauto_pearson_inner(
    double*       __restrict__ cov,
@@ -192,6 +288,8 @@ void pauto_pearson_inner(
       for(int r = 1; r < klen; r++){
          for(int sd = d; sd < d+klen; sd++){
             cov[sd] += df[r]*dg[r+sd+offsetc];
+         }
+         for(int sd = d; sd < d+klen; sd++){
             cov[sd] += df[r+sd+offsetc]*dg[r];
          }
          for(int sd = d; sd < d+klen; sd++){
@@ -211,6 +309,8 @@ void pauto_pearson_inner(
          for(int sr = r; sr < r+klen; sr++){
             for(int sd = d; sd < d+klen; sd++){
                cov[sd] += df[sr]*dg[sr+sd+offsetc];
+            }
+            for(int sd = d; sd < d+klen; sd++){
                cov[sd] += df[sr+sd+offsetc]*dg[sr];
             }
             for(int sd = d; sd < d+klen; sd++){
