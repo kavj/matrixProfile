@@ -118,6 +118,41 @@ int bound)
 */
 
 
+
+auto accum = [&] (auto mp, auto mpi,auto cov,auto df,auto dg,auto invn, auto offsetr, auto offsetc, auto itersr, auto itersc){
+   for(auto r = 0; r < itersr; r++){
+      for(auto i = 0; i < itersc; i++){
+         cov[i] += df[i]*dg[i+offsetc];
+         cov[i] += df[i+offsetc]*dg[i];
+      }
+      for(auto i = 0; i < itersc; i++){
+         if(cov[i]*invn[i]*invn[i+offsetc] > mp[i]){
+            mp[i] = cov[i]*invn[i]*invn[i+offsetc];
+            mpi[i] = i+offsetr+offsetc;
+         }
+      }
+      for(auto i = 0; i < itersc; i++){
+         if(cov[i]*invn[i]*invn[i+offsetc] > mp[i]){
+            mp[i+offsetc] = cov[i]*invn[i]*invn[i+offsetc];
+            mpi[i+offsetc] = i+offsetr;
+         }
+      }
+   }
+};
+
+auto reduce = [&] (auto mp, auto mpi,auto cov, auto invn, auto offsetr, auto offsetc, auto iters){
+   for(auto i = 0; i < iters; i++){
+      if(cov[i]*invn[i]*invn[i+offsetc] > mp[i]){
+         mp[i] = cov[i]*invn[i]*invn[i+offsetc];
+         mpi[i] = i+offsetr+offsetc;
+      }
+      if(cov[i]*invn[i]*invn[i+offsetc] > mp[i]){
+         mp[i+offsetc] = cov[i]*invn[i]*invn[i+offsetc];
+         mpi[i+offsetc] = i+offsetr;
+      }
+   }
+};
+
 void pauto_pearson_colproj(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
@@ -246,30 +281,6 @@ void pauto_pearson_basic_inner(
    }
 }
 
-
-auto accum = [&] (double* cov, const double* df, const double* dg, int coffset, int iters){
-   for(int i = 0; i < iters; i++){
-      cov[i] += df[i]*dg[i+coffset];
-   }
-   for(int i = 0; i < iters; i++){
-      cov[i] += df[i+coffset]*dg[i];
-   }
-};
-
-auto reduce = [&] (double* mp, int* mpi, const double* cov, const double* invn, int roffset, int coffset, int iters){
-   for(int i = 0; i < iters; i++){
-      if(cov[i]*invn[i]*invn[i+coffset] > mp[i]){
-         mp[i] = cov[i]*invn[i]*invn[i+coffset];
-         mpi[i] = i+roffset+coffset;
-      }
-      if(cov[i]*invn[i]*invn[i+coffset] > mp[i]){
-         mp[i+coffset] = cov[i]*invn[i]*invn[i+coffset];
-         mpi[i+coffset] = i+roffset;
-      }
-   }
-};
-
-
 void pauto_pearson_inner_alt(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
@@ -288,118 +299,13 @@ void pauto_pearson_inner_alt(
    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
-   for(int d = klen; d < tlen; d += klen){
-      //reduce(mp,mpi,cov,invn,offsetr,offsetc,1);
-      //accum(cov,df,dg,sd+offsetc,klen-1);
-   }
-}
-
-
-
-void pauto_pearson_inner(
-   double*       __restrict__ cov,
-   double*       __restrict__ mp,
-   int*          __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
-   const int tlen,
-   const int offsetr,
-   const int offsetc)
-{
-   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
-   mp =   (double*)__builtin_assume_aligned(mp,prefalign);
-   mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
-   df =   (const double*)__builtin_assume_aligned(df,prefalign);
-   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
-   invn = (const double*)__builtin_assume_aligned(invn,prefalign);
-
-  
-   for(int d = klen; d < tlen; d += klen){
-      for(int sd = d; sd < d+klen; sd++){
-         if(mp[0] < cov[sd]*invn[0]*invn[sd+offsetc]){
-            mp[0] = cov[sd]*invn[0]*invn[sd+offsetc];
-            mpi[0] = sd+offsetc+offsetr;
-         }
-      }
-      for(int sd = d; sd < d+klen; sd++){
-         if(mp[sd+offsetc] < cov[sd]*invn[0]*invn[sd+offsetc]){
-            mp[sd+offsetc] = cov[sd]*invn[0]*invn[sd+offsetc];
-            mpi[sd+offsetc] = offsetr; 
-         }
-      }
-      for(int r = 1; r < klen; r++){
-         for(int sd = d; sd < d+klen; sd++){
-            cov[sd] += df[r]*dg[r+sd+offsetc];
-         }
-         for(int sd = d; sd < d+klen; sd++){
-            cov[sd] += df[r+sd+offsetc]*dg[r];
-         }
-         for(int sd = d; sd < d+klen; sd++){
-            if(mp[r] < cov[sd]*invn[r]*invn[r+sd+offsetc]){
-               mp[r] = cov[sd]*invn[r]*invn[r+sd+offsetc];
-               mpi[r] = r+sd+offsetc+offsetr;
-            }
-         }
-         for(int sd = d; sd < d+klen; sd++){
-            if(mp[r+sd+offsetc] < cov[sd]*invn[r]*invn[r+sd+offsetc]){
-               mp[r+sd+offsetc] = cov[sd]*invn[r]*invn[r+sd+offsetc];
-               mpi[r+sd+offsetc] = r+offsetr;
-            }
-         }
-      }
-      for(int r = klen; r < tlen; r += klen){
-         for(int sr = r; sr < r+klen; sr++){
-            for(int sd = d; sd < d+klen; sd++){
-               cov[sd] += df[sr]*dg[sr+sd+offsetc];
-            }
-            for(int sd = d; sd < d+klen; sd++){
-               cov[sd] += df[sr+sd+offsetc]*dg[sr];
-            }
-            for(int sd = d; sd < d+klen; sd++){
-               if(mp[sr] < cov[sd]*invn[sr]*invn[sr+sd+offsetc]){
-                  mp[sr] = cov[sd]*invn[sr]*invn[sr+sd+offsetc];
-                  mpi[sr] = sr+sd+offsetc+offsetr;
-               }
-            }
-            for(int sd = d; sd < d+klen; sd++){
-               if(mp[sr+sd+offsetc] < cov[sd]*invn[sr]*invn[sr+sd+offsetc]){
-                  mp[sr+sd+offsetc] = cov[sd]*invn[sr]*invn[sr+sd+offsetc];
-                  mpi[sr+sd+offsetc] = sr+offsetr;
-               }
-            }
-         }
+   for(int d = 0; d < tlen; d += klen){
+      reduce(mp,mpi,cov+d,invn,offsetr,d+offsetc,klen);
+      accum(mp,mpi,cov+d,df,dg,invn,0,d+offsetc,klen-1,klen);
+      for(int r = klen; r < tlen; r+=klen){
+         accum(cov+d,mp+r,mpi+r,df+r,dg+r,invn+r,r,d+offsetc,klen,klen);
       }
    }
 }
 
 
-
-/*
-void pauto_pearson_reftest(
-   double*       __restrict__ cov,
-   double*       __restrict__ mp,
-   int*          __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
-   int minlag,
-   int mlen)
-{
-   for(int i = minlag; i < mlen; i++){
-      for(int j = 0; j < mlen-i; j++){
-         cov[i] += df[j]*dg[i+j];
-         cov[i] += df[i+j]*dg[j];
-         double corr = cov[i]*invn[j]*invn[i+j];
-         if(mp[j] < corr){
-            mp[j] = corr;
-            mpi[j] = i+j;
-         }
-         if(mp[i+j] < corr){
-            mp[i+j] = corr;
-            mpi[i+j] = i;
-         }
-      }
-   }
-}
-*/
