@@ -117,6 +117,48 @@ int bound)
 }
 */
 
+
+void pauto_pearson_colproj(
+   double*       __restrict__ cov, 
+   double*       __restrict__ mp,  
+   int*          __restrict__ mpi, 
+   const double* __restrict__ df,  
+   const double* __restrict__ dg, 
+   const double* __restrict__ invn, 
+   int tlen,
+   int offsetr, 
+   int offsetc, 
+   int bound)
+{
+   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
+   mp =   (double*)__builtin_assume_aligned(mp,prefalign);
+   mpi =  (int*)__builtin_assume_aligned(mpi,prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
+   invn = (const double*)__builtin_assume_aligned(invn,prefalign);
+
+   for(int c = 0; c < c + tlen; c++){
+      for(int d = 0; d < c; d++){
+         cov[d] += df[c+offsetc]*dg[c-d];
+         cov[d] += df[c-d]*dg[c+offsetc];
+      }
+      for(int d = 0; d < c; d++){
+         if(cov[d]*invn[c-d]*invn[c+offsetc] > mp[c-d]){
+            mp[c-d] = cov[d]*invn[c-d]*invn[c+offsetc];
+            mpi[c-d] = c+offsetc+offsetr;
+         }
+      }
+      for(int d = 0; d < c; d++){
+         if(cov[d]*invn[c-d]*invn[c+offsetc] > mp[c+offsetc]){
+            mp[c+offsetc] = cov[d]*invn[c-d]*invn[c+offsetc];
+            mpi[c+offsetc] = c-d+offsetr;
+         }
+      } 
+   } 
+}
+
+
+
 void pauto_pearson_edge(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
@@ -135,7 +177,7 @@ void pauto_pearson_edge(
    df =   (const double*)__builtin_assume_aligned(df,prefalign);
    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
-   
+ 
    for(int d = 0; d < std::min(tlen,bound); d++){
       if(cov[d]*invn[0]*invn[d+offsetc] > mp[0]){
          mp[0] = cov[d]*invn[0]*invn[d+offsetc];  
@@ -145,7 +187,7 @@ void pauto_pearson_edge(
          mp[d+offsetc] = cov[d]*invn[0]*invn[d+offsetc]; 
          mpi[d+offsetc] = offsetr;
       }
-      for(int r = 0; r < std::min(tlen,bound-d); r++){
+      for(int r = 1; r < std::min(tlen,bound-d); r++){
          cov[d] += df[r]*dg[r+d+offsetc];
          cov[d] += df[r+d+offsetc]*dg[r];
          if(cov[d]*invn[r]*invn[r+d+offsetc] > mp[r]){
@@ -188,7 +230,7 @@ void pauto_pearson_basic_inner(
          mpi[d] = offsetr;
       }
    }
-   for(int r = 0; r < tlen; r++){
+   for(int r = 1; r < tlen; r++){
       for(int d = 0; d < tlen; d++){ 
          cov[d] += df[r]*dg[r+d+offsetc];
          cov[d] += df[r+d+offsetc]*dg[r];
@@ -272,6 +314,7 @@ void pauto_pearson_inner(
    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
+  
    for(int d = klen; d < tlen; d += klen){
       for(int sd = d; sd < d+klen; sd++){
          if(mp[0] < cov[sd]*invn[0]*invn[sd+offsetc]){

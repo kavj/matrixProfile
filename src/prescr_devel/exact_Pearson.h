@@ -21,7 +21,7 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    }
 
    int mlen = ts.len - sublen + 1;
-   const int tlen = 65536;
+   const int tlen = 131072;
    int tail = (mlen - minlag)%tlen;
    int tilesperdim = (mlen - minlag - tail)/tlen + (tail ? 1 : 0);
  
@@ -34,8 +34,10 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
       return;
    } 
 
-   ts.setstride(tlen); cov.setstride(tlen); mu.setstride(tlen); df.setstride(tlen); dg.setstride(tlen); invn.setstride(tlen); mp.setstride(tlen); mpi.setstride(tlen);
- 
+   ts.setstride(tlen); cov.setstride(tlen); mu.setstride(tlen); df.setstride(tlen); 
+   dg.setstride(tlen); invn.setstride(tlen); mp.setstride(tlen); mpi.setstride(tlen);
+    
+
    xmean_windowed(ts(0),mu(0),ts.len,sublen);
    xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
    init_dfdx(ts(0), mu(0), df(0), dg(0),sublen,ts.len);
@@ -43,13 +45,27 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    std::fill(mpi(0),mpi(0)+mlen,-1); 
 
    for(int i = 0; i < tilesperdim; i++){
+      center_query_ref(ts(i),mu(i),q(i),sublen);
+   }
+
+   printf("%d\n",tilesperdim);   
+   writeDoubles("testoutputs/df",df.dat,mlen);
+   writeDoubles("testoutputs/dg",dg.dat,mlen);
+   writeDoubles("testoutputs/mu",mu.dat,mlen);
+   writeDoubles("testoutputs/invn",invn.dat,mlen); 
+
+
+   for(int i = 0; i < tilesperdim; i++){
       #pragma omp parallel for
       for(int j = 0; j < tilesperdim-i; j++){
-         batchcov_ref(ts(j)+minlag,cov(j),q(j),mu(j),tlen,sublen);
-         if(i+j+2 < tilesperdim){
+         printf("tilesperdim:%d max_offset:%d\n",tilesperdim,(i+j)*tlen+2*tlen+minlag);
+         if((i+j+2)*tlen <= mlen){
+            batchcov_ref(ts(j)+minlag,cov(j),q(j),mu(j),tlen,sublen);
             pauto_pearson_basic_inner(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag);
          }
          else{
+            int t = std::min(tlen,mlen-minlag-(i+j)*tlen);
+            batchcov_ref(ts(j)+minlag,cov(j),q(j),mu(j),t,sublen);
             pauto_pearson_edge(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag,mlen-minlag-(i+j)*tlen);
          }
       }
