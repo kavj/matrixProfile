@@ -21,7 +21,7 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    }
 
    int mlen = ts.len - sublen + 1;
-   const int tlen = 131072;
+   const int tlen = 65536/4;
    int tail = (mlen - minlag)%tlen;
    int tilesperdim = (mlen - minlag - tail)/tlen + (tail ? 1 : 0);
  
@@ -54,19 +54,21 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    writeDoubles("testoutputs/mu",mu.dat,mlen);
    writeDoubles("testoutputs/invn",invn.dat,mlen); 
 
-
-   for(int i = 0; i < tilesperdim; i++){
+   for(int diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for
-      for(int j = 0; j < tilesperdim-i; j++){
-         printf("tilesperdim:%d max_offset:%d\n",tilesperdim,(i+j)*tlen+2*tlen+minlag);
-         if((i+j+2)*tlen <= mlen){
-            batchcov_ref(ts(j)+minlag,cov(j),q(j),mu(j),tlen,sublen);
-            pauto_pearson_basic_inner(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag);
+      for(int offst = diag; offst < tilesperdim-diag; offst++){
+         if((diag+offst+2)*tlen <= mlen){
+            printf("%d\n",diag+offst);
+            batchcov_ref(ts(offst)+minlag,cov(offst),q(offst),mu(offst),tlen,sublen);
+             
+//            writeDoubles("testoutputs/cov0",cov.dat,mlen);
+            pauto_pearson_basic_inner(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag);
          }
          else{
-            int t = std::min(tlen,mlen-minlag-(i+j)*tlen);
-            batchcov_ref(ts(j)+minlag,cov(j),q(j),mu(j),t,sublen);
-            pauto_pearson_edge(cov(j),mp(j),mpi(j),df(j),dg(j),invn(j),tlen,j*tlen,i*tlen+minlag,mlen-minlag-(i+j)*tlen);
+            printf("%d\n",diag+offst);
+            batchcov_ref(ts(offst)+minlag,cov(offst),q(offst),mu(offst),std::min(tlen,mlen-minlag-(diag+offst)*tlen),sublen);
+//            writeDoubles("testoutputs/cov1",cov.dat,mlen);
+            pauto_pearson_edge(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag,mlen-minlag-(diag+offst)*tlen);
          }
       }
    }
