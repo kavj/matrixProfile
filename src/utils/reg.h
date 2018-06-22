@@ -3,8 +3,6 @@
 #define __BLOCK__
 template<typename dt>
 struct block{
-  // inline reg_block() __attribute__((always_inline)){
-  //  }
    dt r0;
    dt r1;
    dt r2;
@@ -59,7 +57,5 @@ struct block{
       }
    } 
 };
-
-
 
 #endif
