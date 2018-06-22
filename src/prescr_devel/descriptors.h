@@ -47,9 +47,10 @@ template<typename dtype> struct stridedbuf{
    int stride;
    int len;
 
-   stridedbuf(dtype* a, int len, int stride, int count) : dat(a), len(len), stride(stride), bcount(count) {} 
+   // stridedbuf(dtype* a, int len, int stride, int count) : dat(a), len(len), stride(stride), bcount(count) {} 
 
    stridedbuf(int buflen) : stride(buflen), len(buflen), bcount(1) {
+   //   dat = (dtype*)init_buffer(paddedlen(buflen,prefalign)*sizeof(dtype),prefalign);
       dat = reinterpret_cast<dtype*>(init_buffer(paddedlen(buflen,prefalign)*sizeof(dtype),prefalign));
    }
    
@@ -71,7 +72,7 @@ template<typename dtype> struct stridedbuf{
    }
 
    inline dtype*  __attribute__((always_inline)) operator()(int i){ 
-      return i < bcount ? dat + i*stride : nullptr;
+      return (i < bcount) ? (dat + i*stride) : nullptr;
    }
    
 };

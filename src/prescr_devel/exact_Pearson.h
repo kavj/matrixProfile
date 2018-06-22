@@ -13,7 +13,7 @@
 // can get the core of the algorithms down to sufficiently simple single functions
 
 typedef double dtype;
-typedef int itype;
+typedef long long itype;
 
 void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stridedbuf<itype>& mpi, int minlag, int sublen){
    if(!ts.isvalid()){
@@ -21,7 +21,7 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    }
 
    int mlen = ts.len - sublen + 1;
-   const int tlen = 65536/4;
+   const int tlen = 16384;
    int tail = (mlen - minlag)%tlen;
    int tilesperdim = (mlen - minlag - tail)/tlen + (tail ? 1 : 0);
  
@@ -36,7 +36,6 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
 
    ts.setstride(tlen); cov.setstride(tlen); mu.setstride(tlen); df.setstride(tlen); 
    dg.setstride(tlen); invn.setstride(tlen); mp.setstride(tlen); mpi.setstride(tlen);
-    
 
    xmean_windowed(ts(0),mu(0),ts.len,sublen);
    xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
@@ -48,27 +47,19 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
       center_query_ref(ts(i),mu(i),q(i),sublen);
    }
 
-   printf("%d\n",tilesperdim);   
-   writeDoubles("testoutputs/df",df.dat,mlen);
-   writeDoubles("testoutputs/dg",dg.dat,mlen);
-   writeDoubles("testoutputs/mu",mu.dat,mlen);
-   writeDoubles("testoutputs/invn",invn.dat,mlen); 
-
    for(int diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for
       for(int offst = diag; offst < tilesperdim-diag; offst++){
-         if((diag+offst+2)*tlen <= mlen){
-            printf("%d\n",diag+offst);
-            batchcov_ref(ts(offst)+minlag,cov(offst),q(offst),mu(offst),tlen,sublen);
-             
-//            writeDoubles("testoutputs/cov0",cov.dat,mlen);
+         printf("diag: %d, offset: %d diag+offset+2*tlen == %d\n",diag*tlen,offst*tlen,(diag+offst+2)*tlen);
+         if(minlag+(diag+offst+2)*tlen <= mlen){
+            printf("on inner\n");
+            batchcov_ref(ts(diag+offst)+minlag,cov(offst),q(offst),mu(offst),tlen,sublen);
             pauto_pearson_basic_inner(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag);
          }
          else{
-            printf("%d\n",diag+offst);
-            batchcov_ref(ts(offst)+minlag,cov(offst),q(offst),mu(offst),std::min(tlen,mlen-minlag-(diag+offst)*tlen),sublen);
-//            writeDoubles("testoutputs/cov1",cov.dat,mlen);
-            pauto_pearson_edge(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag,mlen-minlag-(diag+offst)*tlen);
+            printf("on edge\n");
+           // batchcov_ref(ts(offst)+minlag,cov(offst),q(offst),mu(offst),std::min(tlen,mlen-minlag-(diag+offst)*tlen),sublen);
+           // pauto_pearson_edge(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag,mlen-minlag-(diag+offst)*tlen);
          }
       }
    }
