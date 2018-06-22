@@ -53,7 +53,7 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
          printf("diag: %d, offset: %d diag+offset+2*tlen == %d\n",diag*tlen,offst*tlen,(diag+offst+2)*tlen);
          if(minlag+(diag+offst+2)*tlen <= mlen){
             printf("on inner\n");
-            batchcov_ref(ts(diag+offst)+minlag,cov(offst),q(offst),mu(offst),tlen,sublen);
+            batchcov_ref(ts(diag+offst)+minlag,cov(offst),q(offst),mu(offst)+minlag,tlen,sublen);
             pauto_pearson_basic_inner(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag);
          }
          else{
