@@ -16,114 +16,123 @@
 #define simlen 4  // move to header later
 #define unroll 8
 #define step 32
+
 // rename and reorganize later. This should be in a different namespace or compilation unit
 
 
 
+static inline void  pauto_pearson_AVX_kern (double*       __restrict__ cov, 
+                                            double*       __restrict__ mp, 
+                                            long long*    __restrict__ mpi, 
+                                            const double* __restrict__ df, 
+                                            const double* __restrict__ dg, 
+                                            const double* __restrict__ invn, 
+                                            int ofr, 
+                                            int ofc){
 
-static inline void  pauto_pearson_AVX_kern (double* __restrict__ cov, double* __restrict__ mp, long long* __restrict__ mpi, const double* __restrict__ df, const double* __restrict__ dg, const double* __restrict__ invn, int ofstr, int ofstc){
    cov = (double*)__builtin_assume_aligned(cov,prefalign);
    df  = (const double*)__builtin_assume_aligned(df,prefalign);
    dg  = (const double*)__builtin_assume_aligned(dg,prefalign);
    invn   = (const double*)__builtin_assume_aligned(invn,prefalign);
    mp  = (double*)__builtin_assume_aligned(mp,prefalign);
    mpi = (long long*)__builtin_assume_aligned(mpi,prefalign);
-   for(int i = 0; i < klen; i++){
-      for(int j = 0; j < klen; j+=step){
+
+   for(int r = 0; r < klen; r++){
+      for(int d = 0; d < klen; d+=step){
          block<__m256d> cov_r;
-         if( (j != 0)){
-            for(int k = 0; k < unroll; k++){
-               cov_r(k) = aload(cov,simlen*(j+k));
+         for(int sd = 0; sd < unroll; sd++){
+            cov_r(sd) = aload(cov,simlen*(d+sd));
+         }
+         __m256d q = brdcst(dg,r);
+         for(int sd = 0; sd < unroll; sd++){
+            cov_r(sd) = mul_add(q,uload(df,r+d+simlen*sd),cov_r(sd));
+         }
+         q = brdcst(df,r);
+         for(int sd = 0; sd < unroll; sd++){
+            cov_r(sd) = mul_add(q,uload(dg,r+d+simlen*sd),cov_r(sd));
+            astore(cov_r(sd),cov,simlen*(d+sd));
+         }
+         q = brdcst(invn,r);
+         for(int sd = 0; sd < unroll; sd++){
+            cov_r(sd) *= q;
+         }
+         for(int sd = 0; sd < unroll; sd++){
+            cov_r(sd) *= uload(invn,r+d+simlen*sd);
+         }
+         block<__m256i> mask;
+         for(int sd = 0; sd < unroll; sd++){
+            mask(sd) = cov_r(sd) > uload(mp,r+d+simlen*sd);
+         }
+         __m256i s = brdcst(r);
+         for(int sd = 0; sd < unroll; sd++){
+            if(testnz(mask(sd))){
+               maskstore(cov_r(sd),mask(sd),mp+r+d+simlen*sd);
+               maskstore(s,mask(sd),mpi+r+simlen*sd);
             }
-            __m256d q = brdcst(dg,i);
-            for(int k = 0; k < unroll; k++){
-               cov_r(k) = mul_add(q,uload(df,i+j+simlen*k),cov_r(k));
-            }
-            q = brdcst(df,i);
-            for(int k = 0; k < unroll; k++){
-               cov_r(k) = mul_add(q,uload(dg,i+j+simlen*k),cov_r(k));
-               astore(cov_r(k),cov,simlen*(j+k));
-            }
-            q = brdcst(invn,i);
-            for(int k = 0; k < unroll; k++){
-               cov_r(k) *= q;
-            }
-            for(int k = 0; k < unroll; k++){
-               cov_r(k) *= uload(invn,i+j+simlen*k);
-            }
-            block<__m256i> mask;
-            for(int k = 0; k < unroll; k++){
-               mask(k) = cov_r(k) > uload(mp,i+j+simlen*k);
-            }
-            __m256i s = brdcst(i);
-            for(int k = 0; k < unroll; k++){
-               if(testnz(mask(k))){
-                  maskstore(cov_r(k),mask(k),mp+i+j+simlen*k);
-                  maskstore(s,mask(k),mpi+i+simlen*k);
-               }
-            }
-            struct rpair r = max_reduce_8x1(cov_r(0),cov_r(1),cov_r(2),cov_r(3),cov_r(4),cov_r(5),cov_r(6),cov_r(7));
-            //Todo: technically this is incorrect, as we're writing back 4 operands rather than 1. It would be possible to do a final comparison against a temporary buffer and make one sweep at the end
-            // alternatively use the if statement to determine if we need to do a horizontal max (since that is quite expensive)
-            __m256i msk = r.val > brdcst(mp,i+j);
-            if(testnz(msk)){
-               maskstore(r.val,msk,mp+i+j);
-               maskstore(r.index+brdcst(i+j+ofstc),msk,mpi+i+j);
-            }
+         }
+         struct rpair v = max_reduce_8x1(cov_r(0),cov_r(1),cov_r(2),cov_r(3),cov_r(4),cov_r(5),cov_r(6),cov_r(7));
+         //Todo: technically this is incorrect, as we're writing back 4 operands rather than 1. It would be possible to do a final comparison against a temporary buffer and make one sweep at the end
+         // alternatively use the if statement to determine if we need to do a horizontal max (since that is quite expensive)
+         __m256i msk = v.val > brdcst(mp,r+d);
+         if(testnz(msk)){
+            maskstore(v.val,msk,mp+r+d);
+            maskstore(v.index+brdcst(r+d+ofc),msk,mpi+r+d);
          }
       }
    }
 }
 
 
-/*
-void pauto_pearson_xinner(
-   double*      __restrict__ cov,
-   double*      __restrict__ mpr,
-      int*      __restrict__ mpri,
-   double*      __restrict__ mpc,
-      int*      __restrict__ mpci,
-const double*   __restrict__ df,
-const double*   __restrict__ dg,
-const double*   __restrict__ dx,
-const double*   __restrict__ dy,
-const double*   __restrict__ invnf,
-const double*   __restrict__ invnx,
-int tlen,
-int offsetr,
-int offsetc,
-int bound)
+auto pauto_pearson_reduce_naive = [&](
+   double*       __restrict__ cov, 
+   double*       __restrict__ mp,  
+   long long*    __restrict__ mpi, 
+   const double* __restrict__ invn, 
+   int tlen,
+   int ofr, 
+   int ofc, 
+   int clim)
 {
-   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
-   mpr =   (double*)__builtin_assume_aligned(mpr,prefalign);
-   mpri =  (int*)__builtin_assume_aligned(mpri,prefalign);
-   mpc =  (double*) __builtin_assume_aligned(mpc,prefalign);
-   mpci = (int*) __builtin_assume_aligned(mpci,prefalign);
-   df =   (const double*)__builtin_assume_aligned(df,prefalign);
-   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
-   dx =   (const double*)__builtin_assume_aligned(dx,prefalign);
-   dy =   (const double*)__builtin_assume_aligned(dy,prefalign);
-   invnf = (const double*)__builtin_assume_aligned(invnf,prefalign);
-   invnx = (const double*)__builtin_assume_aligned(invnx,prefalign);
-    
-   for(int d = 0; d < tlen; d++){
-      if(cov[d]*invnf[0]*invnx[d+offsetc] > mpr[0]){
-         mpr[0] = cov[d]*invnf[0]*invnx[d+offsetc];
-         mpri[0] = d+offsetr+offsetc;
+   for(int d = 0; d < clim; d++){
+      if(cov[d]*invn[0]*invn[d+ofc] > mp[0]){
+         mp[0] = cov[d]*invn[0]*invn[d+ofc];
+         mpi[0] = d+ofc+ofr;
       }
-      if(cov[d]*invnf[0]*invnx[d+offsetc] > mpc[d+offsetc]){
-         mpc[d] = cov[d]*invnf[0]*invnx[d+offsetc];
-         mpci[d] = offsetr;
+      if(cov[d]*invn[0]*invn[d+ofc] > mp[d+ofc]){
+         mp[d+ofc] = cov[d]*invn[0]*invn[d+ofc];
+         mpi[d+ofc] = ofr;
       }
    }
-   for(int r = 0; r < tlen; r++){
-      
+};
+
+auto pauto_pearson_update_naive = [&](
+   double*       __restrict__ cov, 
+   double*       __restrict__ mp,  
+   long long*    __restrict__ mpi, 
+   const double* __restrict__ df,  
+   const double* __restrict__ dg, 
+   const double* __restrict__ invn, 
+   int tlen,
+   int ofr, 
+   int ofc, 
+   int rlim,
+   int clim)
+{
+   for(int r = 0; r < rlim; r++){
+      for(int d = 0; d < clim-r; d++){
+         cov[d] += df[r]*dg[r+d+ofc];
+         cov[d] += df[r+d+ofc]*dg[r];
+         if(cov[d]*invn[r]*invn[r+d+ofc] > mp[r]){
+            mp[r] = cov[d]*invn[r]*invn[r+d+ofc];
+            mpi[r] = r+d+ofc+ofr;
+         }
+         if(cov[d]*invn[r]*invn[r+d+ofc] > mp[r+d+ofc]){
+            mp[r+d+ofc] = cov[d]*invn[r]*invn[r+d+ofc];
+            mpi[r+d+ofc] = r+ofr;
+         }
+      }
    }
-
-}
-*/
-
-
+};
 
 void pauto_pearson_xedge(
    double*       __restrict__ cov, 
@@ -133,46 +142,40 @@ void pauto_pearson_xedge(
    const double* __restrict__ dg, 
    const double* __restrict__ invn, 
    int tlen,
-   int ofstr, 
-   int ofstc, 
+   int ofr, 
+   int ofc, 
    int bound)
 {
-   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
-   mp =   (double*)__builtin_assume_aligned(mp,prefalign);
-   mpi =  (long long*)__builtin_assume_aligned(mpi,prefalign);
+   cov =  (double*)      __builtin_assume_aligned(cov,prefalign);
+   mp =   (double*)      __builtin_assume_aligned(mp,prefalign);
+   mpi =  (long long*)   __builtin_assume_aligned(mpi,prefalign);
    df =   (const double*)__builtin_assume_aligned(df,prefalign);
    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
-   
-   const int dmx = std::min(bound,tlen);
-   // this should be initialize, 
- 
-   for(int d = 0; d < dmx; d += klen){
-      const int rmx = std::min(bound-d,tlen);
-      const int ralgn = rmx - rmx%klen - 2*klen;
-      for(int r = klen; r < ralgn; r += klen){
-         pauto_pearson_AVX_kern(cov, mp, mpi, df, dg, invn, ofstr+r, ofstc+d);
-      }     
-      for(int r = ralgn; r < rmx; r++){  
-         for(int subd = d; subd < std::min(bound-r,d+klen); subd++){
-            cov[d] += df[r]*dg[r+d+ofstc];
-            cov[d] += df[r+d+ofstc]*dg[r];
-            if(cov[d]*invn[r]*invn[r+d+ofstc] > mp[r]){
-               mp[r] = cov[d]*invn[r]*invn[r+d+ofstc];
-               mpi[r] = r+d+ofstc+ofstr;
-            }
-            if(cov[d]*invn[r]*invn[r+d+ofstc] > mp[r+d+ofstc]){
-               mp[r+d+ofstc] = cov[d]*invn[r]*invn[r+d+ofstc];
-               mpi[r+d+ofstc] = r+ofstr;
-            }
-         }
+
+   const int tail = bound%klen;
+   const int dalgn = bound < tlen ? (bound - tail) : tlen; 
+   for(int d = 0; d < dalgn; d+= klen){
+      const int ralgn = (bound - d) < tlen ? (bound - d - tail) : tlen;
+      if(ralgn != 0){
+        for(int r = 0; r < ralgn; r += klen){
+
+        } 
+        // call lambda
       }
+      else{
+        // call lambda init
+        // call lambda  
+      }
+   }
+   if(bound < tlen){
+      // lambda init then lambda
    }
 }
 
 
 
-void pauto_pearson_edge(
+void pauto_pearson_naive_edge(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    long long*    __restrict__ mpi, 
@@ -180,8 +183,8 @@ void pauto_pearson_edge(
    const double* __restrict__ dg, 
    const double* __restrict__ invn, 
    int tlen,
-   int ofstr, 
-   int ofstc, 
+   int ofr, 
+   int ofc, 
    int bound)
 {
    cov =  (double*)__builtin_assume_aligned(cov,prefalign);
@@ -192,24 +195,24 @@ void pauto_pearson_edge(
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
  
    for(int d = 0; d < std::min(tlen,bound); d++){
-      if(cov[d]*invn[0]*invn[d+ofstc] > mp[0]){
-         mp[0] = cov[d]*invn[0]*invn[d+ofstc];  
-         mpi[0] = d+ofstr+ofstc;
+      if(cov[d]*invn[0]*invn[d+ofc] > mp[0]){
+         mp[0] = cov[d]*invn[0]*invn[d+ofc];  
+         mpi[0] = d+ofr+ofc;
       }
-      if(cov[d]*invn[0]*invn[d+ofstc] > mp[d+ofstc]){
-         mp[d+ofstc] = cov[d]*invn[0]*invn[d+ofstc]; 
-         mpi[d+ofstc] = ofstr;
+      if(cov[d]*invn[0]*invn[d+ofc] > mp[d+ofc]){
+         mp[d+ofc] = cov[d]*invn[0]*invn[d+ofc]; 
+         mpi[d+ofc] = ofr;
       }
       for(int r = 1; r < std::min(tlen,bound-d); r++){
-         cov[d] += df[r]*dg[r+d+ofstc];
-         cov[d] += df[r+d+ofstc]*dg[r];
-         if(cov[d]*invn[r]*invn[r+d+ofstc] > mp[r]){
-            mp[r] = cov[d]*invn[r]*invn[r+d+ofstc];
-            mpi[r] = r+d+ofstc+ofstr;
+         cov[d] += df[r]*dg[r+d+ofc];
+         cov[d] += df[r+d+ofc]*dg[r];
+         if(cov[d]*invn[r]*invn[r+d+ofc] > mp[r]){
+            mp[r] = cov[d]*invn[r]*invn[r+d+ofc];
+            mpi[r] = r+d+ofc+ofr;
          }
-         if(cov[d]*invn[r]*invn[r+d+ofstc] > mp[r+d+ofstc]){
-            mp[r+d+ofstc] = cov[d]*invn[r]*invn[r+d+ofstc];
-            mpi[r+d+ofstc] = r+ofstr;
+         if(cov[d]*invn[r]*invn[r+d+ofc] > mp[r+d+ofc]){
+            mp[r+d+ofc] = cov[d]*invn[r]*invn[r+d+ofc];
+            mpi[r+d+ofc] = r+ofr;
          }
       }
    }
@@ -224,8 +227,8 @@ void pauto_pearson_xinner(
    const double* __restrict__ dg,
    const double* __restrict__ invn,
    const int tlen,
-   const int offsetr,
-   const int offsetc)
+   const int ofr,
+   const int ofc)
 {
    cov  = (double*)      __builtin_assume_aligned(cov,prefalign);
    mp   = (double*)      __builtin_assume_aligned(mp,prefalign);
@@ -237,13 +240,13 @@ void pauto_pearson_xinner(
    for(int d = 0; d < tlen; d += klen){
       // call init pass here
       for(int r = klen; r < tlen; r += klen){
-         pauto_pearson_AVX_kern(cov+d,mp+r,mpi+r,df+r,dg+r,invn+r,offsetr+r,offsetc+d);
+         pauto_pearson_AVX_kern(cov+d,mp+r,mpi+r,df+r,dg+r,invn+r,ofr+r,ofc+d);
       }
    }
 }
 
 
-void pauto_pearson_basic_inner(
+void pauto_pearson_naive_inner(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    long long*    __restrict__ mpi,
@@ -251,8 +254,8 @@ void pauto_pearson_basic_inner(
    const double* __restrict__ dg,
    const double* __restrict__ invn,
    const int tlen,
-   const int ofstr,
-   const int ofstc)
+   const int ofr,
+   const int ofc)
 {
    cov =  (double*)      __builtin_assume_aligned(cov,prefalign);
    mp =   (double*)      __builtin_assume_aligned(mp,prefalign);
@@ -262,26 +265,26 @@ void pauto_pearson_basic_inner(
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
    for(int d = 0; d < tlen; d++){
-      if(mp[0] < cov[d]*invn[0]*invn[d+ofstc]){
-         mp[0] = cov[d]*invn[0]*invn[d+ofstc];
-         mpi[0] = d+ofstr+ofstc;
+      if(mp[0] < cov[d]*invn[0]*invn[d+ofc]){
+         mp[0] = cov[d]*invn[0]*invn[d+ofc];
+         mpi[0] = d+ofr+ofc;
       }
-      if(mp[d+ofstc] < cov[d]*invn[0]*invn[d+ofstc]){
-         mp[d+ofstc] = cov[d]*invn[0]*invn[d+ofstc];
-         mpi[d+ofstc] = ofstr;
+      if(mp[d+ofc] < cov[d]*invn[0]*invn[d+ofc]){
+         mp[d+ofc] = cov[d]*invn[0]*invn[d+ofc];
+         mpi[d+ofc] = ofr;
       }
    }
    for(int r = 1; r < tlen; r++){
       for(int d = 0; d < tlen; d++){ 
-         cov[d] += df[r]*dg[r+d+ofstc];
-         cov[d] += df[r+d+ofstc]*dg[r];
-         if(mp[r] < cov[d]*invn[r]*invn[r+d+ofstc]){
-            mp[r] = cov[d]*invn[r]*invn[r+d+ofstc];
-            mpi[r] = static_cast<long long>(r+d+ofstr+ofstc);
+         cov[d] += df[r]*dg[r+d+ofc];
+         cov[d] += df[r+d+ofc]*dg[r];
+         if(mp[r] < cov[d]*invn[r]*invn[r+d+ofc]){
+            mp[r] = cov[d]*invn[r]*invn[r+d+ofc];
+            mpi[r] = static_cast<long long>(r+d+ofr+ofc);
 	 }
-	 if(mp[r+d+ofstc] < cov[d]*invn[r]*invn[r+d+ofstc]){
-            mp[r+d+ofstc] = cov[d]*invn[r]*invn[r+d+ofstc];
-            mpi[r+d+ofstc] = static_cast<long long>(r+ofstr);
+	 if(mp[r+d+ofc] < cov[d]*invn[r]*invn[r+d+ofc]){
+            mp[r+d+ofc] = cov[d]*invn[r]*invn[r+d+ofc];
+            mpi[r+d+ofc] = static_cast<long long>(r+ofr);
          }
       }
    }

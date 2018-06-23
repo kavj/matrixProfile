@@ -15,7 +15,7 @@
 typedef double dtype;
 typedef long long itype;
 
-void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stridedbuf<itype>& mpi, int minlag, int sublen){
+void pearson_pauto_reduc(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stridedbuf<itype>& mpi, int minlag, int sublen){
    if(!ts.isvalid()){
       printf("invalid time series\n");
    }
@@ -46,17 +46,19 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    for(int i = 0; i < tilesperdim; i++){
       center_query_ref(ts(i),mu(i),q(i),sublen);
    }
+
    int aligned = std::max(0,tilesperdim - 1 - (tail > 0 ? 1 : 0));
 
    for(int diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for
-      for(int offst = 0; offst < aligned-diag; offst++){
-         batchcov_ref(ts(diag+offst)+minlag,cov(offst),q(offst),mu(offst)+minlag,tlen,sublen);
-         pauto_pearson_basic_inner(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag);
+      for(int ofst = 0; ofst < aligned-diag; ofst++){
+         batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,tlen,sublen);
+         pauto_pearson_naive_inner(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag);
       }
-      for(int offst = std::max(0,aligned-diag); offst < tilesperdim-diag; offst++){
-         batchcov_ref(ts(diag+offst)+minlag,cov(offst),q(offst),mu(offst)+minlag,std::min(tlen,mlen-minlag-(diag+offst)*tlen),sublen);
-         pauto_pearson_edge(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag,mlen-minlag-(diag+offst)*tlen);
+      int ofst = std::max(0,aligned-diag);
+      if(ofst < tilesperdim-diag){
+         batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,std::min(tlen,mlen-minlag-(diag+ofst)*tlen),sublen);
+         pauto_pearson_naive_edge(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag,mlen-minlag-(diag+ofst)*tlen);
       }
    }
 }

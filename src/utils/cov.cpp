@@ -1,7 +1,11 @@
+#include <cstdio>
+#include <string>
+#include "primitive_print_funcs.h"
 #include <algorithm>
 #include <cmath>
 #include "../arch/avx256.h"
 #include "reg.h"
+
 
 using namespace avx256_t;
 typedef double dtype;
@@ -44,6 +48,7 @@ void center_query(const dtype* __restrict__ ts, const dtype* __restrict__  mu,  
 
 
 void batchcov_ref(const dtype* __restrict__ ts, dtype* cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int count, int sublen){
+   static int k = 0;
    for(int i = 0; i < count; i++){
       cov[i] = 0; 
       for(int j = 0; j < sublen; j++){
