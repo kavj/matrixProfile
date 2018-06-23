@@ -38,7 +38,7 @@ int main(int argc, char* argv[]){
     clock_t t1 = clock();
     stridedbuf<double> mp(ts.len-m+1);
     stridedbuf<long long>mpi(ts.len-m+1);
-    maxpearson_partialauto(ts,mp,mpi,m,m);
+    pearson_pauto_reduc(ts,mp,mpi,m,m);
     writeDoubles("testoutputs/mp",mp.dat,n-m+1);
     writeLongs("testoutputs/mpi",mpi.dat,n-m+1);
     clock_t t2 = clock();
