@@ -37,10 +37,10 @@ int main(int argc, char* argv[]){
     fclose(f);
     clock_t t1 = clock();
     stridedbuf<double> mp(ts.len-m+1);
-    stridedbuf<int>mpi(ts.len-m+1);
+    stridedbuf<long long>mpi(ts.len-m+1);
     maxpearson_partialauto(ts,mp,mpi,m,m);
     writeDoubles("testoutputs/mp",mp.dat,n-m+1);
-    writeInts("testoutputs/mpi",mpi.dat,n-m+1);
+    writeLongs("testoutputs/mpi",mpi.dat,n-m+1);
     clock_t t2 = clock();
     printf("time: %lf\n",static_cast<double>((t2-t1))/CLOCKS_PER_SEC);
     return 0;
