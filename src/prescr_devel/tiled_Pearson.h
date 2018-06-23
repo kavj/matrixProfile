@@ -23,6 +23,19 @@ void pauto_pearson_xinner(
    const int offsetc);
 
 
+void pauto_pearson_basic_inner_alt(
+   double*       __restrict__ cov,
+   double*       __restrict__ mp,
+   long long*    __restrict__ mpi,
+   const double* __restrict__ df,
+   const double* __restrict__ dg,
+   const double* __restrict__ invn,
+   const int tlen,
+   const int offsetr,
+   const int offsetc);
+
+
+
 void pauto_pearson_basic_inner(
    double*       __restrict__ cov,
    double*       __restrict__ mp,

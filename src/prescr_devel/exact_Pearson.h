@@ -46,21 +46,17 @@ void maxpearson_partialauto(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stride
    for(int i = 0; i < tilesperdim; i++){
       center_query_ref(ts(i),mu(i),q(i),sublen);
    }
+   int aligned = std::max(0,tilesperdim - 1 - (tail > 0 ? 1 : 0));
 
    for(int diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for
-      for(int offst = diag; offst < tilesperdim-diag; offst++){
-         printf("diag: %d, offset: %d diag+offset+2*tlen == %d\n",diag*tlen,offst*tlen,(diag+offst+2)*tlen);
-         if(minlag+(diag+offst+2)*tlen <= mlen){
-            printf("on inner\n");
-            batchcov_ref(ts(diag+offst)+minlag,cov(offst),q(offst),mu(offst)+minlag,tlen,sublen);
-            pauto_pearson_basic_inner(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag);
-         }
-         else{
-            printf("on edge\n");
-           // batchcov_ref(ts(offst)+minlag,cov(offst),q(offst),mu(offst),std::min(tlen,mlen-minlag-(diag+offst)*tlen),sublen);
-           // pauto_pearson_edge(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag,mlen-minlag-(diag+offst)*tlen);
-         }
+      for(int offst = 0; offst < aligned-diag; offst++){
+         batchcov_ref(ts(diag+offst)+minlag,cov(offst),q(offst),mu(offst)+minlag,tlen,sublen);
+         pauto_pearson_basic_inner(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag);
+      }
+      for(int offst = std::max(0,aligned-diag); offst < tilesperdim-diag; offst++){
+         batchcov_ref(ts(diag+offst)+minlag,cov(offst),q(offst),mu(offst)+minlag,std::min(tlen,mlen-minlag-(diag+offst)*tlen),sublen);
+         pauto_pearson_edge(cov(offst),mp(offst),mpi(offst),df(offst),dg(offst),invn(offst),tlen,offst*tlen,diag*tlen+minlag,mlen-minlag-(diag+offst)*tlen);
       }
    }
 }
