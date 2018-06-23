@@ -83,17 +83,16 @@ static inline void  pauto_pearson_AVX_kern (double*       __restrict__ cov,
 }
 
 
-auto pauto_pearson_reduce_naive = [&](
+auto pauto_pearson_init_naive = [&](
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    long long*    __restrict__ mpi, 
    const double* __restrict__ invn, 
-   int tlen,
    int ofr, 
    int ofc, 
-   int clim)
+   int dlim)
 {
-   for(int d = 0; d < clim; d++){
+   for(int d = 0; d < dlim; d++){
       if(cov[d]*invn[0]*invn[d+ofc] > mp[0]){
          mp[0] = cov[d]*invn[0]*invn[d+ofc];
          mpi[0] = d+ofc+ofr;
@@ -112,14 +111,13 @@ auto pauto_pearson_update_naive = [&](
    const double* __restrict__ df,  
    const double* __restrict__ dg, 
    const double* __restrict__ invn, 
-   int tlen,
    int ofr, 
    int ofc, 
-   int rlim,
+   int dlim,
    int clim)
 {
-   for(int r = 0; r < rlim; r++){
-      for(int d = 0; d < clim-r; d++){
+   for(int d = 0; d < dlim; d++){
+      for(int r = 0; r < clim-d; r++){
          cov[d] += df[r]*dg[r+d+ofc];
          cov[d] += df[r+d+ofc]*dg[r];
          if(cov[d]*invn[r]*invn[r+d+ofc] > mp[r]){
@@ -144,7 +142,7 @@ void pauto_pearson_xedge(
    int tlen,
    int ofr, 
    int ofc, 
-   int bound)
+   int clim)
 {
    cov =  (double*)      __builtin_assume_aligned(cov,prefalign);
    mp =   (double*)      __builtin_assume_aligned(mp,prefalign);
@@ -153,23 +151,28 @@ void pauto_pearson_xedge(
    dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
-   const int tail = bound%klen;
-   const int dalgn = bound < tlen ? (bound - tail) : tlen; 
+   const int tail = clim%klen;
+   const int dalgn = std::max(0,std::min(clim - tail - 2*klen, tlen));
    for(int d = 0; d < dalgn; d+= klen){
-      const int ralgn = (bound - d) < tlen ? (bound - d - tail) : tlen;
-      if(ralgn != 0){
-        for(int r = 0; r < ralgn; r += klen){
-
-        } 
-        // call lambda
-      }
-      else{
-        // call lambda init
-        // call lambda  
+      const int ralgn = std::min(dalgn + klen - d, tlen);
+      // optimized init
+      for(int r = klen; r < ralgn; r += klen){
+         pauto_pearson_AVX_kern(cov+d,mp+r,mpi+r,df+r,dg+r,invn+r,ofr+r,ofc+d);
+      } 
+   }
+   // We run the fringe sections after doing everything where simd is possible
+   // This is particularly import for AVX where the compiler may not call zero_upper for every scalar section
+   if(tail != 0){
+      for(int d = 0; d < dalgn; d+= klen){
+         const int ral = std::max(0,std::min(dalgn + klen - d, tlen));
+         if(ral < tlen){
+            pauto_pearson_update_naive(cov+d,mp+ral,mpi+ral,df+ral,dg+ral,invn+ral,ofr,ofc+dalgn,klen,clim-d);
+         }
       }
    }
-   if(bound < tlen){
-      // lambda init then lambda
+   if(clim < tlen){
+      pauto_pearson_init_naive(cov+dalgn,mp,mpi,invn,ofr,ofc+dalgn,clim-dalgn);
+      pauto_pearson_update_naive(cov+dalgn,mp+1,mpi+1,df+1,dg+1,invn+1,ofr+1,ofc+dalgn,clim-dalgn-1,clim-dalgn-1); 
    }
 }
 
