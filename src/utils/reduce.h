@@ -55,9 +55,5 @@ static inline struct rpair __attribute__((always_inline)) max_reduce_8x1(const _
 }
 
 
-static inline struct rpair __attribute__((always_inline)) max_reduce_256x1(const __m256d& r0){
-   
-
-}
 
 #endif

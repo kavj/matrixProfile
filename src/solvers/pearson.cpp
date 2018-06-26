@@ -3,8 +3,6 @@
 #include "descriptors.h"
 #include "../utils/xprec_math.h"
 #include "../utils/cov.h"
-#include "tiled_Pearson.h"
-#include "../utils/primitive_print_funcs.h"
 #define prefalign 64
 
 
@@ -12,10 +10,10 @@
 // It will handle basic preprocessing only in cases where some things are not externally supplied, particularly since we 
 // can get the core of the algorithms down to sufficiently simple single functions
 
-typedef double dtype;
-typedef long long itype;
+typedef stridedbuf<double> dsbuf;
+typedef stridedbuf<long long> lsbuf;
 
-void pearson_pauto_reduc(stridedbuf<dtype>& ts, stridedbuf<dtype>& mp, stridedbuf<itype>& mpi, int minlag, int sublen){
+void pearson_pauto_reduc(dsbuf& ts, stridedbuf<dtype>& mp, lsbuf& mpi, int minlag, int sublen){
    if(!ts.isvalid()){
       printf("invalid time series\n");
    }

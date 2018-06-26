@@ -45,8 +45,6 @@ void center_query(const dtype* __restrict__ ts, const dtype* __restrict__  mu,  
    }
 }
 
-
-
 void batchcov_ref(const dtype* __restrict__ ts, dtype* cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int count, int sublen){
    static int k = 0;
    for(int i = 0; i < count; i++){
@@ -56,7 +54,6 @@ void batchcov_ref(const dtype* __restrict__ ts, dtype* cov, const dtype* __restr
       }
    }
 }
-
 
 void batchcov(const dtype* __restrict__ ts, dtype* __restrict__ cov, const dtype* __restrict__ query, const dtype* __restrict__ mu, int count, int sublen){
    cov = (dtype*) __builtin_assume_aligned(cov,32);

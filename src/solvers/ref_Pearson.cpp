@@ -5,82 +5,10 @@
 #include "../utils/xprec_math.h"
 #include "../utils/max_reduce.h"
 #include "descriptors.h"
-#include "../utils/primitive_print_funcs.h"
-#ifdef prefalign
-#undef prefalign
-#endif
-#define prefalign 64 
-#define unroll 8
-//#define prefalign 32 
-#define klen 64 
-#define simlen 4  // move to header later
-#define unroll 8
-#define step 32
 
 // rename and reorganize later. This should be in a different namespace or compilation unit
 
 
-
-static inline void  pauto_pearson_AVX_kern (double*       __restrict__ cov, 
-                                            double*       __restrict__ mp, 
-                                            long long*    __restrict__ mpi, 
-                                            const double* __restrict__ df, 
-                                            const double* __restrict__ dg, 
-                                            const double* __restrict__ invn, 
-                                            int ofr, 
-                                            int ofc){
-
-   cov = (double*)__builtin_assume_aligned(cov,prefalign);
-   df  = (const double*)__builtin_assume_aligned(df,prefalign);
-   dg  = (const double*)__builtin_assume_aligned(dg,prefalign);
-   invn   = (const double*)__builtin_assume_aligned(invn,prefalign);
-   mp  = (double*)__builtin_assume_aligned(mp,prefalign);
-   mpi = (long long*)__builtin_assume_aligned(mpi,prefalign);
-
-   for(int r = 0; r < klen; r++){
-      for(int d = 0; d < klen; d+=step){
-         block<__m256d> cov_r;
-         for(int sd = 0; sd < unroll; sd++){
-            cov_r(sd) = aload(cov,simlen*(d+sd));
-         }
-         __m256d q = brdcst(dg,r);
-         for(int sd = 0; sd < unroll; sd++){
-            cov_r(sd) = mul_add(q,uload(df,r+d+simlen*sd),cov_r(sd));
-         }
-         q = brdcst(df,r);
-         for(int sd = 0; sd < unroll; sd++){
-            cov_r(sd) = mul_add(q,uload(dg,r+d+simlen*sd),cov_r(sd));
-            astore(cov_r(sd),cov,simlen*(d+sd));
-         }
-         q = brdcst(invn,r);
-         for(int sd = 0; sd < unroll; sd++){
-            cov_r(sd) *= q;
-         }
-         for(int sd = 0; sd < unroll; sd++){
-            cov_r(sd) *= uload(invn,r+d+simlen*sd);
-         }
-         block<__m256i> mask;
-         for(int sd = 0; sd < unroll; sd++){
-            mask(sd) = cov_r(sd) > uload(mp,r+d+simlen*sd);
-         }
-         __m256i s = brdcst(r);
-         for(int sd = 0; sd < unroll; sd++){
-            if(testnz(mask(sd))){
-               maskstore(cov_r(sd),mask(sd),mp+r+d+simlen*sd);
-               maskstore(s,mask(sd),mpi+r+simlen*sd);
-            }
-         }
-         struct rpair v = max_reduce_8x1(cov_r(0),cov_r(1),cov_r(2),cov_r(3),cov_r(4),cov_r(5),cov_r(6),cov_r(7));
-         //Todo: technically this is incorrect, as we're writing back 4 operands rather than 1. It would be possible to do a final comparison against a temporary buffer and make one sweep at the end
-         // alternatively use the if statement to determine if we need to do a horizontal max (since that is quite expensive)
-         __m256i msk = v.val > brdcst(mp,r+d);
-         if(testnz(msk)){
-            maskstore(v.val,msk,mp+r+d);
-            maskstore(v.index+brdcst(r+d+ofc),msk,mpi+r+d);
-         }
-      }
-   }
-}
 
 
 auto pauto_pearson_init_naive = [&](
@@ -132,7 +60,7 @@ auto pauto_pearson_update_naive = [&](
    }
 };
 
-void pauto_pearson_xedge(
+static void pauto_pearson_xedge(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    long long*    __restrict__ mpi, 
@@ -178,7 +106,7 @@ void pauto_pearson_xedge(
 
 
 
-void pauto_pearson_naive_edge(
+static void pauto_pearson_naive_edge(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    long long*    __restrict__ mpi, 
@@ -222,7 +150,7 @@ void pauto_pearson_naive_edge(
 }
 
 
-void pauto_pearson_xinner(
+static void pauto_pearson_xinner(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    long long*    __restrict__ mpi,
@@ -249,7 +177,7 @@ void pauto_pearson_xinner(
 }
 
 
-void pauto_pearson_naive_inner(
+static void pauto_pearson_naive_inner(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    long long*    __restrict__ mpi,
@@ -294,4 +222,51 @@ void pauto_pearson_naive_inner(
 }
 
 
+void pearson_pauto_reduc(dsbuf& ts, stridedbuf<dtype>& mp, lsbuf& mpi, int minlag, int sublen){
+   if(!ts.isvalid()){
+      printf("invalid time series\n");
+   }
+
+   int mlen = ts.len - sublen + 1;
+   const int tlen = 16384;
+   int tail = (mlen - minlag)%tlen;
+   int tilesperdim = (mlen - minlag - tail)/tlen + (tail ? 1 : 0);
+ 
+   stridedbuf<dtype>mu(mlen); stridedbuf<dtype>invn(mlen); stridedbuf<dtype>df(mlen);  
+   stridedbuf<dtype>dg(mlen); stridedbuf<dtype>cov(mlen);  
+   multibuf<dtype> q(tilesperdim,sublen);
+
+   if(!(cov.isvalid() && mu.isvalid() && invn.isvalid() && df.isvalid()  && dg.isvalid() && mp.isvalid() && mpi.isvalid())){
+      printf("could not assign objects\n");
+      return;
+   } 
+
+   ts.setstride(tlen); cov.setstride(tlen); mu.setstride(tlen); df.setstride(tlen); 
+   dg.setstride(tlen); invn.setstride(tlen); mp.setstride(tlen); mpi.setstride(tlen);
+
+   xmean_windowed(ts(0),mu(0),ts.len,sublen);
+   xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
+   init_dfdx(ts(0), mu(0), df(0), dg(0),sublen,ts.len);
+   std::fill(mp(0),mp(0)+mlen,-1.0);
+   std::fill(mpi(0),mpi(0)+mlen,-1); 
+
+   for(int i = 0; i < tilesperdim; i++){
+      center_query_ref(ts(i),mu(i),q(i),sublen);
+   }
+
+   int aligned = std::max(0,tilesperdim - 1 - (tail > 0 ? 1 : 0));
+
+   for(int diag = 0; diag < tilesperdim; diag++){
+      #pragma omp parallel for
+      for(int ofst = 0; ofst < aligned-diag; ofst++){
+         batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,tlen,sublen);
+         pauto_pearson_naive_inner(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag);
+      }
+      int ofst = std::max(0,aligned-diag);
+      if(ofst < tilesperdim-diag){
+         batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,std::min(tlen,mlen-minlag-(diag+ofst)*tlen),sublen);
+         pauto_pearson_naive_edge(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag,mlen-minlag-(diag+ofst)*tlen);
+      }
+   }
+}
 
