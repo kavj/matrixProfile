@@ -41,8 +41,6 @@ static void printboolarray(double * a, double* b, double* mask){
    printf("\n");
 }
 
-
-
 static void makeshiftmultadd(double* a, double* b, double* c){
     for(int i = 0; i < 4; i++){
        c[i] = a[i]*b[i] + a[i];
@@ -80,9 +78,6 @@ static void expect(void){
 static void actual(void){
    printf("actual output\n");
 }
-
-
-
 
 using namespace avx256_t;
 
@@ -255,7 +250,5 @@ int main(void){
   // p = shiftmerge1(p,r);
    ustore(p,x,0);
    printm256I(p);
-    
-
 }
 

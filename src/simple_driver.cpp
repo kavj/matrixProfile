@@ -1,10 +1,9 @@
-#include "alloc.h"
 #include<cstdio>
 #include<ctime>
-#include "descriptors.h"
-#include "exact_Pearson.h"
-#include "../utils/primitive_print_funcs.h"
-
+#include "utils/alloc.h"
+#include "utils/descriptors.h"
+#include "utils/primitive_print_funcs.h"
+#include "solvers/pearson.h"
 
 
 int main(int argc, char* argv[]){
@@ -38,6 +37,7 @@ int main(int argc, char* argv[]){
     clock_t t1 = clock();
     stridedbuf<double> mp(ts.len-m+1);
     stridedbuf<long long>mpi(ts.len-m+1);
+
     pearson_pauto_reduc(ts,mp,mpi,m,m);
     writeDoubles("testoutputs/mp",mp.dat,n-m+1);
     writeLongs("testoutputs/mpi",mpi.dat,n-m+1);
@@ -45,4 +45,3 @@ int main(int argc, char* argv[]){
     printf("time: %lf\n",static_cast<double>((t2-t1))/CLOCKS_PER_SEC);
     return 0;
 }
-

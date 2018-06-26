@@ -1,14 +1,9 @@
 #include<algorithm>
-//#include "../utils/max_reduce.h"
 #include "../utils/reg.h"
 #include "../utils/cov.h"
-#include "../utils/xprec_math.h"
-#include "../utils/max_reduce.h"
-#include "descriptors.h"
-
-// rename and reorganize later. This should be in a different namespace or compilation unit
-
-
+#include "../utils/xprec.h"
+#include "../utils/reduce.h"
+#include "../utils/descriptors.h"
 
 
 auto pauto_pearson_init_naive = [&](
@@ -60,7 +55,7 @@ auto pauto_pearson_update_naive = [&](
    }
 };
 
-static void pauto_pearson_xedge(
+static void pauto_pearson_edge(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    long long*    __restrict__ mpi, 
@@ -106,7 +101,7 @@ static void pauto_pearson_xedge(
 
 
 
-static void pauto_pearson_naive_edge(
+static void pauto_pearson_edge(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    long long*    __restrict__ mpi, 
@@ -150,7 +145,7 @@ static void pauto_pearson_naive_edge(
 }
 
 
-static void pauto_pearson_xinner(
+static void pauto_pearson_inner(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    long long*    __restrict__ mpi,
@@ -177,7 +172,7 @@ static void pauto_pearson_xinner(
 }
 
 
-static void pauto_pearson_naive_inner(
+static void pauto_pearson_inner(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    long long*    __restrict__ mpi,
@@ -260,12 +255,12 @@ void pearson_pauto_reduc(dsbuf& ts, stridedbuf<dtype>& mp, lsbuf& mpi, int minla
       #pragma omp parallel for
       for(int ofst = 0; ofst < aligned-diag; ofst++){
          batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,tlen,sublen);
-         pauto_pearson_naive_inner(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag);
+         pauto_pearson_inner(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag);
       }
       int ofst = std::max(0,aligned-diag);
       if(ofst < tilesperdim-diag){
          batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,std::min(tlen,mlen-minlag-(diag+ofst)*tlen),sublen);
-         pauto_pearson_naive_edge(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag,mlen-minlag-(diag+ofst)*tlen);
+         pauto_pearson_edge(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag,mlen-minlag-(diag+ofst)*tlen);
       }
    }
 }

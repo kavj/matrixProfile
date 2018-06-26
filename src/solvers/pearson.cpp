@@ -1,7 +1,7 @@
 #include <cstdio>
 #include<algorithm>
-#include "descriptors.h"
-#include "../utils/xprec_math.h"
+#include "../utils/descriptors.h"
+#include "../utils/xprec.h"
 #include "../utils/cov.h"
 #define prefalign 64
 
@@ -51,12 +51,12 @@ void pearson_pauto_reduc(dsbuf& ts, stridedbuf<dtype>& mp, lsbuf& mpi, int minla
       #pragma omp parallel for
       for(int ofst = 0; ofst < aligned-diag; ofst++){
          batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,tlen,sublen);
-         pauto_pearson_naive_inner(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag);
+         pauto_pearson_inner(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag);
       }
       int ofst = std::max(0,aligned-diag);
       if(ofst < tilesperdim-diag){
          batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,std::min(tlen,mlen-minlag-(diag+ofst)*tlen),sublen);
-         pauto_pearson_naive_edge(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag,mlen-minlag-(diag+ofst)*tlen);
+         pauto_pearson_edge(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag,mlen-minlag-(diag+ofst)*tlen);
       }
    }
 }
