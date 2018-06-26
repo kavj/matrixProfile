@@ -3,12 +3,8 @@
 #include "../utils/descriptors.h"
 #include "../utils/xprec.h"
 #include "../utils/cov.h"
-#define prefalign 64
+#include "tiled_pearson.h"
 
-
-// redesigning this part
-// It will handle basic preprocessing only in cases where some things are not externally supplied, particularly since we 
-// can get the core of the algorithms down to sufficiently simple single functions
 
 typedef stridedbuf<double> dsbuf;
 typedef stridedbuf<long long> lsbuf;
