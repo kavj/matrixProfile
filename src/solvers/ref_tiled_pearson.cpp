@@ -1,10 +1,8 @@
 #include<algorithm>
 #include "../utils/reg.h"
-#include "../utils/cov.h"
 #include "../utils/xprec.h"
 #include "../utils/reduce.h"
-#include "../utils/descriptors.h"
-
+#define prefalign 64  // Todo: put this somewhere in build settings, since its used by both allocators and anything that may apply auto vectorization
 
 auto pauto_pearson_init_naive = [&](
    double*       __restrict__ cov, 
@@ -16,12 +14,12 @@ auto pauto_pearson_init_naive = [&](
    int dlim)
 {
    for(int d = 0; d < dlim; d++){
-      if(cov[d]*invn[0]*invn[d+ofc] > mp[0]){
-         mp[0] = cov[d]*invn[0]*invn[d+ofc];
-         mpi[0] = d+ofc+ofr;
+      if(cov[d] * invn[0] * invn[d + ofc] > mp[0]){
+         mp[0] = cov[d] * invn[0] * invn[d + ofc];
+         mpi[0] = d + ofc + ofr;
       }
-      if(cov[d]*invn[0]*invn[d+ofc] > mp[d+ofc]){
-         mp[d+ofc] = cov[d]*invn[0]*invn[d+ofc];
+      if(cov[d] * invn[0] * invn[d + ofc] > mp[d + ofc]){
+         mp[d+ofc] = cov[d] * invn[0] * invn[d + ofc];
          mpi[d+ofc] = ofr;
       }
    }
@@ -40,16 +38,16 @@ auto pauto_pearson_update_naive = [&](
    int clim)
 {
    for(int d = 0; d < dlim; d++){
-      for(int r = 0; r < clim-d; r++){
-         cov[d] += df[r]*dg[r+d+ofc];
-         cov[d] += df[r+d+ofc]*dg[r];
-         if(cov[d]*invn[r]*invn[r+d+ofc] > mp[r]){
-            mp[r] = cov[d]*invn[r]*invn[r+d+ofc];
-            mpi[r] = r+d+ofc+ofr;
+      for(int r = 0; r < clim - d; r++){
+         cov[d] += df[r] * dg[r + d + ofc];
+         cov[d] += df[r + d + ofc]*dg[r];
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r]){
+            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r] = r + d + ofc + ofr;
          }
-         if(cov[d]*invn[r]*invn[r+d+ofc] > mp[r+d+ofc]){
-            mp[r+d+ofc] = cov[d]*invn[r]*invn[r+d+ofc];
-            mpi[r+d+ofc] = r+ofr;
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
+            mp[r+d+ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r+d+ofc] = r + ofr;
          }
       }
    }
@@ -122,24 +120,24 @@ void pauto_pearson_edge(
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
  
    for(int d = 0; d < std::min(tlen,bound); d++){
-      if(cov[d]*invn[0]*invn[d+ofc] > mp[0]){
-         mp[0] = cov[d]*invn[0]*invn[d+ofc];  
-         mpi[0] = d+ofr+ofc;
+      if(cov[d] * invn[0] * invn[d + ofc] > mp[0]){
+         mp[0] = cov[d] * invn[0] * invn[d + ofc];  
+         mpi[0] = d + ofr + ofc;
       }
-      if(cov[d]*invn[0]*invn[d+ofc] > mp[d+ofc]){
-         mp[d+ofc] = cov[d]*invn[0]*invn[d+ofc]; 
-         mpi[d+ofc] = ofr;
+      if(cov[d] * invn[0] * invn[d + ofc] > mp[d + ofc]){
+         mp[d + ofc] = cov[d] * invn[0] * invn[d + ofc]; 
+         mpi[d + ofc] = ofr;
       }
-      for(int r = 1; r < std::min(tlen,bound-d); r++){
-         cov[d] += df[r]*dg[r+d+ofc];
-         cov[d] += df[r+d+ofc]*dg[r];
-         if(cov[d]*invn[r]*invn[r+d+ofc] > mp[r]){
-            mp[r] = cov[d]*invn[r]*invn[r+d+ofc];
-            mpi[r] = r+d+ofc+ofr;
+      for(int r = 1; r < std::min(tlen, bound - d); r++){
+         cov[d] += df[r] * dg[r + d + ofc];
+         cov[d] += df[r + d + ofc] * dg[r];
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r]){
+            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r] = r + d + ofc + ofr;
          }
-         if(cov[d]*invn[r]*invn[r+d+ofc] > mp[r+d+ofc]){
-            mp[r+d+ofc] = cov[d]*invn[r]*invn[r+d+ofc];
-            mpi[r+d+ofc] = r+ofr;
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
+            mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r + d + ofc] = r + ofr;
          }
       }
    }
@@ -192,26 +190,26 @@ void pauto_pearson_inner(
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
    for(int d = 0; d < tlen; d++){
-      if(mp[0] < cov[d]*invn[0]*invn[d+ofc]){
-         mp[0] = cov[d]*invn[0]*invn[d+ofc];
-         mpi[0] = d+ofr+ofc;
+      if(mp[0] < cov[d] * invn[0] * invn[d + ofc]){
+         mp[0] = cov[d] * invn[0] * invn[d + ofc];
+         mpi[0] = static_cast<long long>(d + ofr + ofc);
       }
-      if(mp[d+ofc] < cov[d]*invn[0]*invn[d+ofc]){
-         mp[d+ofc] = cov[d]*invn[0]*invn[d+ofc];
-         mpi[d+ofc] = ofr;
+      if(mp[d + ofc] < cov[d] * invn[0] * invn[d + ofc]){
+         mp[d + ofc] = cov[d] * invn[0] * invn[d + ofc];
+         mpi[d + ofc] = ofr;
       }
    }
    for(int r = 1; r < tlen; r++){
       for(int d = 0; d < tlen; d++){ 
-         cov[d] += df[r]*dg[r+d+ofc];
-         cov[d] += df[r+d+ofc]*dg[r];
-         if(mp[r] < cov[d]*invn[r]*invn[r+d+ofc]){
-            mp[r] = cov[d]*invn[r]*invn[r+d+ofc];
-            mpi[r] = static_cast<long long>(r+d+ofr+ofc);
+         cov[d] += df[r] * dg[r + d + ofc];
+         cov[d] += df[r + d + ofc] * dg[r];
+         if(mp[r] < cov[d] * invn[r] * invn[r + d + ofc]){
+            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r] = static_cast<long long>(r + d + ofr + ofc);
 	 }
-	 if(mp[r+d+ofc] < cov[d]*invn[r]*invn[r+d+ofc]){
-            mp[r+d+ofc] = cov[d]*invn[r]*invn[r+d+ofc];
-            mpi[r+d+ofc] = static_cast<long long>(r+ofr);
+	 if(mp[r+d+ofc] < cov[d] * invn[r] * invn[r + d + ofc]){
+            mp[r+d+ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r+d+ofc] = static_cast<long long>(r + ofr);
          }
       }
    }

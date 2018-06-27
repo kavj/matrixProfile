@@ -28,10 +28,10 @@ void center_query(const dtype* __restrict__ ts, const dtype* __restrict__  mu,  
       __m256d m = brdcst(mu,0);
       block<__m256d> op;
       for(int k = 0; k < unroll; k++){
-         op(k) = uload(ts,j+k*simlen) - m;
+         op(k) = uload(ts, j + k * simlen) - m;
       }
       for(int k = 0; k < unroll; k++){
-         astore(op(k),q,j+k*simlen);
+         astore(op(k), q, j + k * simlen);
       }
    }
    dtype m = mu[0];
@@ -46,42 +46,42 @@ void batchcov_ref(const dtype* __restrict__ ts, const dtype* __restrict__ mu, co
    for(int i = 0; i < count; i++){
       cov[i] = 0; 
       for(int j = 0; j < sublen; j++){
-         cov[i] += (ts[i+j] - mu[i])*query[j];
+         cov[i] += (ts[i + j] - mu[i]) * query[j];
       }
    }
 }
 
 template<typename dtype>
 void batchcov(const dtype* __restrict__ ts, const dtype* __restrict__ mu, const dtype* __restrict__ query, dtype* __restrict__ cov, int count, int sublen){
-   cov = (dtype*) __builtin_assume_aligned(cov,32);
+   cov =   (dtype*)       __builtin_assume_aligned(cov,32);
    query = (const dtype*) __builtin_assume_aligned(query,32);
-   mu = (const dtype*) __builtin_assume_aligned(mu,32);
+   mu =    (const dtype*) __builtin_assume_aligned(mu,32);
    const int simlen = 4;
    const int loopwid = 32;
    const int unroll = 8;
    #pragma omp parallel for
-   for(int i = 0; i < count; i+=loopwid){
+   for(int i = 0; i < count; i += loopwid){
       block<dtype> c;
       block<dtype> m;
       for(int j = 0; j < unroll; j++){
-         m(j) = uload(mu,i+j*simlen);
+         m(j) = uload(mu, i + j * simlen);
       }
       for(int j = 0; j < sublen; j++){
          for(int k = 0; k < unroll; k++){
-            c(k+unroll) = uload(ts,i+j+k*simlen) - m(j); 
+            c(k+unroll) = uload(ts, i + j + k * simlen) - m(j); 
          }
          dtype q = brdcst(query,j);
          for(int k = 0; k < unroll; k++){
-            c(k) = mul_add(q,c(k+unroll),c(k));
+            c(k) = mul_add(q, c(k + unroll), c(k));
          }
       }
       for(int j = 0; j < unroll; j++){
-         astore(c(j),cov,i+j*simlen);
+         astore(c(j), cov, i + j * simlen);
       }
    }   // fringe should be done here. it would be possible to use a while loop countdown, like std::min(stride,count-i), and i need to add either a backshift or scalar loop that won't break
-   if(count%loopwid){
-      int fringe = count - count%loopwid;
-      batchcov_ref(ts+fringe,cov+fringe,query,mu+fringe,count-fringe,sublen);
+   if(count % loopwid){
+      int fringe = count - count % loopwid;
+      batchcov_ref(ts + fringe, cov + fringe, query, mu + fringe, count - fringe, sublen);
    }
 }
 

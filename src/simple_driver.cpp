@@ -31,17 +31,17 @@ int main(int argc, char* argv[]){
        exit(1);
     }  
     for(int i = 0; i < n; i++){
-       fscanf(f,"%lf\n",t+i);
+       fscanf(f, "%lf\n", t+i);
     }
     fclose(f);
     clock_t t1 = clock();
     primbuf<double> mp(ts.len-m+1);
     primbuf<long long>mpi(ts.len-m+1);
 
-    pearson_pauto_reduc(ts,mp,mpi,m,m);
-    writeDoubles("mp",mp.dat,n-m+1);
-    writeLongs("mpi",mpi.dat,n-m+1);
+    pearson_pauto_reduc(ts, mp, mpi, m, m);
+    writeDoubles("mp", mp.dat, n - m + 1);
+    writeLongs("mpi", mpi.dat, n - m + 1);
     clock_t t2 = clock();
-    printf("time: %lf\n",static_cast<double>((t2-t1))/CLOCKS_PER_SEC);
+    printf("time: %lf\n", static_cast<double>((t2 - t1))/CLOCKS_PER_SEC);
     return 0;
 }

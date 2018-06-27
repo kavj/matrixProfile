@@ -1,6 +1,4 @@
-#include <cstdio>
 #include<algorithm>
-#include "../utils/descriptors.h"
 #include "../utils/xprec.h"
 #include "../utils/cov.h"
 #include "tiled_pearson.h"
@@ -12,8 +10,8 @@ static void init_dfdx(const dtype* __restrict__ ts, const dtype* __restrict__ mu
    df[0] = 0; 
    dx[0] = 0;
    for(int i = 0; i < n-w; i++){
-      df[i+1] = (ts[i+w] - mu[i+1]) + (ts[i] - mu[i]);
-      dx[i+1] = (ts[i+w] - ts[i])/2.0;
+      df[i + 1] = (ts[i + w] - mu[i + 1]) + (ts[i] - mu[i]);
+      dx[i + 1] = (ts[i + w] - ts[i])/2.0;
    }
 }
 
@@ -43,7 +41,7 @@ void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int suble
 
    for(int diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for
-      for(int ofst = 0; ofst < tilesperdim-diag; ofst++){
+      for(int ofst = 0; ofst < tilesperdim - diag; ofst++){
          int rofst = ofst * tlen;
          int cofst = (diag + ofst) * tlen;
          int initofst = cofst + minlag;
