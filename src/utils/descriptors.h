@@ -20,8 +20,8 @@ template<typename dtype> struct multibuf{
    int stride;
 
    multibuf(int count, int blocklen) : bcount(count) {
-      stride = paddedlen(blocklen,prefalign);
-      dat = reinterpret_cast<dtype*>(init_buffer(stride*count*sizeof(dtype),prefalign));
+      stride = paddedlen(blocklen, prefalign);
+      dat = reinterpret_cast<dtype*>(init_buffer(stride * count * sizeof(dtype), prefalign));
    }
    
    inline __attribute__((always_inline)) ~multibuf(){
@@ -33,29 +33,28 @@ template<typename dtype> struct multibuf{
    }
 
    inline dtype*  __attribute__((always_inline)) operator()(int i){ 
-      return i < bcount ? dat + i*stride : nullptr;
+      return i < bcount ? dat + i * stride : nullptr;
    }
 
 };
 
 
 template<typename dtype> struct primbuf{
-   // This does allow for partial aliasing, which should obviously only be used in the case of pasing read only data structures to different threads
-   // If it's externally allocated, then we just want to let it determine the max number of blocks, we can do some minor error checking anyway
+   //Todo: allow for externally allocated memory and OS specific allocators
+
    dtype* dat;
    int len;
 
    primbuf(int buflen) : len(buflen) {
-      dat = reinterpret_cast<dtype*>(init_buffer(paddedlen(buflen,prefalign)*sizeof(dtype),prefalign));
+      dat = reinterpret_cast<dtype*>(init_buffer(paddedlen(buflen, prefalign) * sizeof(dtype), prefalign));
    }
    
    inline __attribute__((always_inline)) ~primbuf(){
-       // Todo: generalize for other allocators
       free(dat);
    }
 
    inline __attribute__((always_inline)) bool isvalid() const {
-      return (dat != nullptr);
+      return (dat != nullptr) && (len > 0);
    }
 
    inline dtype*  __attribute__((always_inline)) operator()(int i){ 

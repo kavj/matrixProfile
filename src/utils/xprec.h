@@ -27,14 +27,14 @@ void fast_invcn(dtype* __restrict__ invn, const dtype* __restrict__ ts, const dt
    dtype a = 0;
    for(int i = 0; i < sublen; i++){
       dtype t = ts[i] - mu[0];
-      a += t*t;
+      a += t * t;
    }
    invn[0] = sqrt(1.0/a);
-   for(int i = 1; i < len-sublen+1; i++){
-      dtype b = ts[i+sublen-1];
-      dtype c = ts[i-1];
-      a += ((b - mu[i+sublen-1]) + (c - mu[i-1])) * (b - c); 
-      invn[i-sublen+1] = 1.0/sqrt(a);
+   for(int i = 1; i < len - sublen + 1; i++){
+      dtype b = ts[i + sublen - 1];
+      dtype c = ts[i - 1];
+      a += ((b - mu[i + sublen - 1]) + (c - mu[i - 1])) * (b - c); 
+      invn[i - sublen + 1] = 1.0/sqrt(a);
    }
 }
 
@@ -47,9 +47,9 @@ dtype invcn(const dtype* __restrict__ ts, const dtype* __restrict__ sI, dtype z,
    for(int i = 1; i < winlen; i++){
        dtype h = ts[i] - z;
        dtype r = h;
-       xmul(h,r);
-       xadd(p,h);
-       s += (h+r);
+       xmul(h, r);
+       xadd(p, h);
+       s += (h + r);
    }
    p += s;
    p = 1.0/sqrt(p); 
@@ -62,14 +62,14 @@ void xsInv(const dtype *ts, const dtype *mu, dtype *sI, int len, int winlen){
    int mlen = len - winlen + 1;
    #pragma omp parallel for
    for(int i = 0; i < mlen; i++){
-      sI[i] = invcn(ts+i,sI+i,mu[i],winlen);
+      sI[i] = invcn(ts + i, sI + i, mu[i], winlen);
    }
 }
 
 
 template<typename dtype>
 void xmean_windowed(const dtype *ts, dtype *mu, int len, int winlen){
-   dtype u,v,w,x,y;
+   dtype u, v, w, x, y;
    u = ts[0];
    v = 0;
    for(int i = 1; i < winlen; i++){
@@ -77,22 +77,22 @@ void xmean_windowed(const dtype *ts, dtype *mu, int len, int winlen){
       y = ts[i];
       u += y;
       x = u - w;
-      v += (w-(u-x))+(y-x);
+      v += (w - (u - x)) + (y - x);
    }
-   mu[0] = (u+v)/winlen;
+   mu[0] = (u + v)/winlen;
    for(int i = winlen; i < len; i++){
       w = u; 
-      y = -1*ts[i-winlen];
+      y = -1 * ts[i - winlen];
       u += y;
       x = u - w;
-      v += (w-(u-x))+(y-x);
+      v += (w - (u - x)) + (y - x);
 
       w = u;
       y = ts[i];
       u += y;
       x = u - w;
-      v += (w-(u-x))+(y-x);
-      mu[i-winlen+1] = (u+v)/winlen;
+      v += (w - (u - x)) + (y - x);
+      mu[i - winlen + 1] = (u + v)/winlen;
    }
 }
 
@@ -100,7 +100,7 @@ void xmean_windowed(const dtype *ts, dtype *mu, int len, int winlen){
 template<typename dtype>
 void sum_windowed(const dtype* ts, dtype *s, int len, int winlen){
    int mlen = len - winlen + 1;
-   dtype u,v,w,x,y;
+   dtype u, v, w, x, y;
    u = ts[0];
    v = 0;
    for(int i = 1; i < winlen; i++){
@@ -108,21 +108,21 @@ void sum_windowed(const dtype* ts, dtype *s, int len, int winlen){
       y = ts[i];
       u += y;
       x = u - w;
-      v += (w-(u-x))+(y-x);
+      v += (w - (u - x)) + (y - x);
    }
    s[0] = u+v;
    for(int i = winlen; i < len; i++){
       w = u; 
-      y = -1*ts[i-winlen];
+      y = -1 * ts[i - winlen];
       u += y;
       x = u - w;
-      v += (w-(u-x))+(y-x);
+      v += (w - (u - x)) + (y - x);
 
       w = u;
       y = ts[i];
       u += y;
       x = u - w;
-      v += (w-(u-x))+(y-x);
-      s[i-winlen+1] = u+v;
+      v += (w - (u - x)) +(y - x);
+      s[i - winlen + 1] = u + v;
    }
 }
