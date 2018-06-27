@@ -1,9 +1,10 @@
-#include<algorithm>
+#include <cstdio>
+#include <algorithm>
 #include "../utils/xprec.h"
 #include "../utils/cov.h"
+#include "../utils/alloc.h"
 #include "tiled_pearson.h"
 #include "pearson.h"
-
 
 
 static void init_dfdx(const dtype* __restrict__ ts, const dtype* __restrict__ mu, dtype* __restrict__ df, dtype* __restrict__ dx, int w, int n){
@@ -42,11 +43,12 @@ void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int suble
       printf("error allocating memory\n");
       exit(1);
    }
-
+   printf("reaches 1\n");
    for(int i = 0; i < tilesperdim; i++){
+      printf("i: %d\n");
       center_query_ref(ts(i * tlen), mu(i * tlen), q(i), sublen);
    }
-
+   printf("reaches 2\n");
    int aligned = std::max(0, tilesperdim - 1 - (tail > 0 ? 1 : 0));
 
    for(int diag = 0; diag < tilesperdim; diag++){

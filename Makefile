@@ -10,7 +10,7 @@ LFLAGS =  -lm
 
 ASMFLAGS = -S  -masm=intel -fno-asynchronous-unwind-tables -fno-exceptions -fno-rtti -fverbose-asm
 
-SRC = src/simple_driver.cpp src/solvers/ref_tiled_pearson.cpp  src/solvers/pearson.cpp  src/utils/primitive_print_funcs.cpp  
+SRC = src/simple_driver.cpp src/solvers/ref_tiled_pearson.cpp  src/utils/alloc.cpp src/solvers/pearson.cpp  src/utils/primitive_print_funcs.cpp  
 
 opt:
 	$(CC) $(SRC)   $(CFLAGS) $(LFLAGS) 

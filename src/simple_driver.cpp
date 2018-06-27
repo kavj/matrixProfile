@@ -1,9 +1,10 @@
 #include<cstdio>
 #include<ctime>
+#include<cstdlib>
 #include "utils/descriptors.h"
 #include "utils/primitive_print_funcs.h"
 #include "solvers/pearson.h"
-
+#define prefalign 64
 
 int main(int argc, char* argv[]){
     if(argc < 4){
