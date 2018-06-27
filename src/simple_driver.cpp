@@ -37,7 +37,6 @@ int main(int argc, char* argv[]){
     clock_t t1 = clock();
     primbuf<double> mp(mlen);
     primbuf<long long>mpi(mlen);
-
     pearson_pauto_reduc(ts, mp, mpi, sublen, sublen);
     writeDoubles("mp", mp.dat, mlen);
     writeLongs("mpi", mpi.dat, mlen);

@@ -3,12 +3,13 @@
 #include "../utils/xprec.h"
 #include "../utils/cov.h"
 #include "../utils/alloc.h"
+#include "../utils/primitive_print_funcs.h"
 #include "tiled_pearson.h"
 #include "pearson.h"
 
 
 static void init_dfdg(const dtype* __restrict__ ts, const dtype* __restrict__ mu, dtype* __restrict__ df, dtype* __restrict__ dg, int len, int sublen){
-   df[0] = 0; 
+   df[0] = 0;
    dg[0] = 0;
    for(int i = 0; i < len - sublen; i++){
       df[i + 1] = (ts[i + sublen] - mu[i + 1]) + (ts[i] - mu[i]);
@@ -37,7 +38,7 @@ void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int suble
    init_dfdg(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
    std::fill(mp(0), mp(0) + mlen, -1.0);
    std::fill(mpi(0), mpi(0) + mlen, -1); 
-
+   
    if(!(mu.valid() && df.valid() && dg.valid() && invn.valid())){
       printf("error allocating memory\n");
       exit(1);
@@ -49,14 +50,14 @@ void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int suble
       #pragma omp parallel for
       for(int ofst = 0; ofst < tilesperdim - diag; ofst++){
          int rofst = ofst * tlen;
-         int cofst = diag * tlen;
-         int initofst = (diag + ofst) * tlen + minlag;
-         if(((diag + ofst + 2) * tlen + minlag) < mlen){
+         int cofst = diag * tlen + minlag;
+         int initofst = rofst + cofst;
+         if(initofst + 2 * tlen < mlen){
             batchcov_ref(ts(initofst), mu(initofst), q(ofst), cov(rofst), tlen, sublen);
             pauto_pearson_inner(cov(rofst), mp(rofst), mpi(rofst), df(rofst), dg(rofst), invn(rofst), tlen, rofst, cofst);
          }
          else{
-            int mxofst = mlen - ((diag + ofst) * tlen + minlag);
+            int mxofst = mlen - initofst;
             int width = std::min(tlen, mxofst);
             batchcov_ref(ts(initofst), mu(initofst), q(ofst), cov(rofst), width, sublen);
             pauto_pearson_edge(cov(rofst), mp(rofst), mpi(rofst), df(rofst), dg(rofst), invn(rofst), tlen, rofst, cofst, mxofst);
