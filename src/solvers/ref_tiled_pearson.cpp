@@ -112,11 +112,11 @@ void pauto_pearson_edge(
    int ofc, 
    int bound)
 {
-   cov =  (double*)__builtin_assume_aligned(cov,prefalign);
-   mp =   (double*)__builtin_assume_aligned(mp,prefalign);
-   mpi =  (long long*)__builtin_assume_aligned(mpi,prefalign);
-   df =   (const double*)__builtin_assume_aligned(df,prefalign);
-   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
+   cov =  (double*)      __builtin_assume_aligned(cov, prefalign);
+   mp =   (double*)      __builtin_assume_aligned(mp,  prefalign);
+   mpi =  (long long*)   __builtin_assume_aligned(mpi, prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,  prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,  prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
  
    for(int d = 0; d < std::min(tlen,bound); d++){
@@ -182,11 +182,11 @@ void pauto_pearson_inner(
    const int ofr,
    const int ofc)
 {
-   cov =  (double*)      __builtin_assume_aligned(cov,prefalign);
-   mp =   (double*)      __builtin_assume_aligned(mp,prefalign);
-   mpi =  (long long*)   __builtin_assume_aligned(mpi,prefalign);
-   df =   (const double*)__builtin_assume_aligned(df,prefalign);
-   dg =   (const double*)__builtin_assume_aligned(dg,prefalign);
+   cov =  (double*)      __builtin_assume_aligned(cov, prefalign);
+   mp =   (double*)      __builtin_assume_aligned(mp,  prefalign);
+   mpi =  (long long*)   __builtin_assume_aligned(mpi, prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,  prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,  prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
    for(int d = 0; d < tlen; d++){
@@ -207,9 +207,9 @@ void pauto_pearson_inner(
             mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
             mpi[r] = static_cast<long long>(r + d + ofr + ofc);
 	 }
-	 if(mp[r+d+ofc] < cov[d] * invn[r] * invn[r + d + ofc]){
-            mp[r+d+ofc] = cov[d] * invn[r] * invn[r + d + ofc];
-            mpi[r+d+ofc] = static_cast<long long>(r + ofr);
+	 if(mp[r + d + ofc] < cov[d] * invn[r] * invn[r + d + ofc]){
+            mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r + d + ofc] = static_cast<long long>(r + ofr);
          }
       }
    }
