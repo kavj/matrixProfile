@@ -4,6 +4,7 @@
 typedef primbuf<double> dsbuf;
 typedef primbuf<long long> lsbuf;
 typedef multibuf<double> mdsbuf;
+typedef double dtype;
 
 void pearson_pauto_reduc(dsbuf& ts, 
                          dsbuf& mp, 

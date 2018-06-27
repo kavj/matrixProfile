@@ -5,7 +5,6 @@
 // ACCURATE SUM AND DOT PRODUCT Ogita et al
 
 
-
 template<typename dtype>
 static inline void xadd (dtype& a, dtype& b){
    dtype c = a + b;
@@ -13,6 +12,7 @@ static inline void xadd (dtype& a, dtype& b){
    b = ((a - (c - d)) + (b - d));
    a = c;
 }
+
 
 template<typename dtype>
 static inline void xmul (dtype &a, dtype& b){
@@ -63,17 +63,6 @@ void xsInv(const dtype *ts, const dtype *mu, dtype *sI, int len, int winlen){
    #pragma omp parallel for
    for(int i = 0; i < mlen; i++){
       sI[i] = invcn(ts+i,sI+i,mu[i],winlen);
-   }
-}
-
-// move to cython layer 
-template<typename dtype>
-void init_dfdx(const dtype* __restrict__ a, const dtype* __restrict__ mu, dtype* __restrict__ df, dtype* __restrict__ dx, int w, int n){
-   df[0] = 0; 
-   dx[0] = 0;
-   for(int i = 0; i < n-w; i++){
-      df[i+1] = (a[i+w] - mu[i+1]) + (a[i]-mu[i]);
-      dx[i+1] = (a[i+w] - a[i])/2.0;
    }
 }
 
@@ -137,4 +126,3 @@ void sum_windowed(const dtype* ts, dtype *s, int len, int winlen){
       s[i-winlen+1] = u+v;
    }
 }
-
