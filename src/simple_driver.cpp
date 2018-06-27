@@ -21,7 +21,7 @@ int main(int argc, char* argv[]){
     int mlen = n-m+1;
     primbuf<double> ts(n);   
  
-    if(!ts.isvalid()){
+    if(!ts.valid()){
        printf("failed to allocate memory for time series\n");
     }
     double* t = ts(0);

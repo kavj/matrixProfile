@@ -28,7 +28,7 @@ template<typename dtype> struct multibuf{
       free(dat);
    }
 
-   inline __attribute__((always_inline)) bool isvalid() const {
+   inline __attribute__((always_inline)) bool valid() const {
       return (dat != nullptr);
    }
 
@@ -53,7 +53,7 @@ template<typename dtype> struct primbuf{
       free(dat);
    }
 
-   inline __attribute__((always_inline)) bool isvalid() const {
+   inline __attribute__((always_inline)) bool valid() const {
       return (dat != nullptr) && (len > 0);
    }
 

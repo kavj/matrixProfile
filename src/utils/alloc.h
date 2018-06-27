@@ -18,6 +18,10 @@ inline void* init_buffer(int buflen, int alignmt){
          perror("posix_memalign");
          exit(1);
       }
+      else{
+         printf("unknown error\n");
+         exit(1);
+      }
    }
    return buf;
 }

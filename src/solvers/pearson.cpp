@@ -18,13 +18,18 @@ static void init_dfdx(const dtype* __restrict__ ts, const dtype* __restrict__ mu
 
 void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int sublen){
 
+   if(!(ts.valid() && mp.valid() && mpi.valid())){
+      printf("bad inputs\n");
+      exit(1);
+   }
+
    int mlen = ts.len - sublen + 1;
    const int tlen = 16384;
-   int tail = (mlen - minlag)%tlen;
+   int tail = (mlen - minlag) % tlen;
    int tilesperdim = (mlen - minlag - tail)/tlen + (tail ? 1 : 0);
  
    dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
-   dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim,sublen);
+   dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim, sublen);
 
    xmean_windowed(ts(0), mu(0), ts.len, sublen);
    xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
@@ -32,6 +37,11 @@ void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int suble
    init_dfdx(ts(0), mu(0), df(0), dg(0), sublen, ts.len);
    std::fill(mp(0), mp(mlen), -1.0);
    std::fill(mpi(0), mpi(mlen), -1); 
+
+   if(!(mu.valid() && df.valid() && dg.valid() && invn.valid())){
+      printf("error allocating memory\n");
+      exit(1);
+   }
 
    for(int i = 0; i < tilesperdim; i++){
       center_query_ref(ts(i * tlen), mu(i * tlen), q(i), sublen);
@@ -46,13 +56,13 @@ void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int suble
          int cofst = (diag + ofst) * tlen;
          int initofst = cofst + minlag;
          if(ofst < tilesperdim - diag){
-            batchcov_ref(ts(initofst), mu(initofst), q(ofst), cov(cofst), tlen, sublen);
+            batchcov_ref(ts(initofst), mu(initofst), q(ofst), cov(rofst), tlen, sublen);
             pauto_pearson_inner(cov(rofst), mp(rofst), mpi(rofst), df(rofst), dg(rofst), invn(rofst), tlen, rofst, cofst);
          }
          else{
             int mxofst = mlen - (diag + ofst)*tlen;
             int width = std::min(tlen, mxofst);
-            batchcov_ref(ts(initofst), mu(initofst), q(ofst), cov(cofst), width, sublen);
+            batchcov_ref(ts(initofst), mu(initofst), q(ofst), cov(rofst), width, sublen);
             pauto_pearson_edge(cov(rofst), mp(rofst), mpi(rofst), df(rofst), dg(rofst), invn(rofst), tlen, rofst, cofst, mxofst);
          }
       }
