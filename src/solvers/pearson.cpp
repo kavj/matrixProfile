@@ -4,56 +4,53 @@
 #include "../utils/xprec.h"
 #include "../utils/cov.h"
 #include "tiled_pearson.h"
+#include "pearson.h"
 
 
-typedef stridedbuf<double> dsbuf;
-typedef stridedbuf<long long> lsbuf;
+void pearson_pauto_reduc(dsbuf& ts, 
+                         dsbuf& mp, 
+                         lsbuf& mpi, 
+                         int minlag, 
+                         int sublen);
 
-void pearson_pauto_reduc(dsbuf& ts, stridedbuf<dtype>& mp, lsbuf& mpi, int minlag, int sublen){
-   if(!ts.isvalid()){
-      printf("invalid time series\n");
-   }
+void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int sublen){
 
    int mlen = ts.len - sublen + 1;
    const int tlen = 16384;
    int tail = (mlen - minlag)%tlen;
    int tilesperdim = (mlen - minlag - tail)/tlen + (tail ? 1 : 0);
  
-   stridedbuf<dtype>mu(mlen); stridedbuf<dtype>invn(mlen); stridedbuf<dtype>df(mlen);  
-   stridedbuf<dtype>dg(mlen); stridedbuf<dtype>cov(mlen);  
-   multibuf<dtype> q(tilesperdim,sublen);
+   dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
+   dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim,sublen);
 
-   if(!(cov.isvalid() && mu.isvalid() && invn.isvalid() && df.isvalid()  && dg.isvalid() && mp.isvalid() && mpi.isvalid())){
-      printf("could not assign objects\n");
-      return;
-   } 
-
-   ts.setstride(tlen); cov.setstride(tlen); mu.setstride(tlen); df.setstride(tlen); 
-   dg.setstride(tlen); invn.setstride(tlen); mp.setstride(tlen); mpi.setstride(tlen);
-
-   xmean_windowed(ts(0),mu(0),ts.len,sublen);
-   xsInv(ts(0),mu(0),invn(0),ts.len,sublen);   
-   init_dfdx(ts(0), mu(0), df(0), dg(0),sublen,ts.len);
-   std::fill(mp(0),mp(0)+mlen,-1.0);
-   std::fill(mpi(0),mpi(0)+mlen,-1); 
+   xmean_windowed(ts(0), mu(0), ts.len, sublen);
+   xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
+   init_dfdx(ts(0), mu(0), df(0), dg(0), sublen, ts.len);
+   std::fill(mp(0), mp(mlen), -1.0);
+   std::fill(mpi(0), mpi(mlen), -1); 
 
    for(int i = 0; i < tilesperdim; i++){
-      center_query_ref(ts(i),mu(i),q(i),sublen);
+      center_query_ref(ts(i*tlen), mu(i*tlen), q(i), sublen);
    }
 
-   int aligned = std::max(0,tilesperdim - 1 - (tail > 0 ? 1 : 0));
+   int aligned = std::max(0, tilesperdim - 1 - (tail > 0 ? 1 : 0));
 
    for(int diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for
-      for(int ofst = 0; ofst < aligned-diag; ofst++){
-         batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,tlen,sublen);
-         pauto_pearson_inner(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag);
-      }
-      int ofst = std::max(0,aligned-diag);
-      if(ofst < tilesperdim-diag){
-         batchcov_ref(ts(diag+ofst)+minlag,cov(ofst),q(ofst),mu(ofst)+minlag,std::min(tlen,mlen-minlag-(diag+ofst)*tlen),sublen);
-         pauto_pearson_edge(cov(ofst),mp(ofst),mpi(ofst),df(ofst),dg(ofst),invn(ofst),tlen,ofst*tlen,diag*tlen+minlag,mlen-minlag-(diag+ofst)*tlen);
+      for(int ofst = 0; ofst < tilesperdim-diag; ofst++){
+         int rofst = ofst*tlen;
+         int cofst = (diag+ofst)*tlen;
+         int initofst = cofst + minlag;
+         if(ofst < tilesperdim-diag){
+            batchcov_ref(ts(initofst), mu(initofst), q(ofst), cov(cofst), tlen, sublen);
+            pauto_pearson_inner(cov(rofst), mp(rofst), mpi(rofst), df(rofst), dg(rofst), invn(rofst), tlen, rofst, cofst);
+         }
+         else{
+            int mxofst = mlen - (diag+ofst)*tlen;
+            int width = std::min(tlen, mxofst);
+            batchcov_ref(ts(cofst), mu(cofst), q(ofst), cov(cofst), width, sublen);
+            pauto_pearson_edge(cov(rofst), mp(rofst), mpi(rofst), df(rofst), dg(rofst), invn(rofst), tlen, rofst, cofst, mxofst);
+         }
       }
    }
 }
-

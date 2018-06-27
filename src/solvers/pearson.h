@@ -1,8 +1,9 @@
 #include "../utils/descriptors.h"
 #define prefalign 64
 
-typedef stridedbuf<double> dsbuf;
-typedef stridedbuf<long long> lsbuf;
+typedef primbuf<double> dsbuf;
+typedef primbuf<long long> lsbuf;
+typedef multibuf<double> mdsbuf;
 
 void pearson_pauto_reduc(dsbuf& ts, 
                          dsbuf& mp, 

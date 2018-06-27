@@ -40,12 +40,12 @@ void fast_invcn(dtype* __restrict__ invn, const dtype* __restrict__ ts, const dt
 
 
 template<typename dtype>
-dtype invcn(dtype *a,dtype *sI, dtype z, int winlen){
-   dtype p = a[0] - z;
+dtype invcn(const dtype* __restrict__ ts, const dtype* __restrict__ sI, dtype z, int winlen){
+   dtype p = ts[0] - z;
    dtype s = p;
    xmul(p,s);
-   for(int j = 1; j < winlen; j++){
-       dtype h = a[j] - z;
+   for(int i = 1; i < winlen; i++){
+       dtype h = ts[i] - z;
        dtype r = h;
        xmul(h,r);
        xadd(p,h);
@@ -58,18 +58,17 @@ dtype invcn(dtype *a,dtype *sI, dtype z, int winlen){
 
 
 template<typename dtype>
-void xsInv(dtype *a, dtype *mu, dtype *sI, int len, int winlen){
-   int k = len - winlen + 1;
+void xsInv(const dtype *ts, const dtype *mu, dtype *sI, int len, int winlen){
+   int mlen = len - winlen + 1;
    #pragma omp parallel for
-   for(int i = 0; i < k; i++){
-      sI[i] = invcn(a+i,sI+i,mu[i],winlen);
+   for(int i = 0; i < mlen; i++){
+      sI[i] = invcn(ts+i,sI+i,mu[i],winlen);
    }
 }
 
 // move to cython layer 
 template<typename dtype>
-void init_dfdx(const dtype* __restrict__ a,const dtype* __restrict__ mu, dtype* __restrict__ df, dtype* __restrict__ dx, int w, int n){
-   
+void init_dfdx(const dtype* __restrict__ a, const dtype* __restrict__ mu, dtype* __restrict__ df, dtype* __restrict__ dx, int w, int n){
    df[0] = 0; 
    dx[0] = 0;
    for(int i = 0; i < n-w; i++){
@@ -80,13 +79,13 @@ void init_dfdx(const dtype* __restrict__ a,const dtype* __restrict__ mu, dtype* 
 
 
 template<typename dtype>
-void xmean_windowed(dtype *a, dtype *mu, int len, int winlen){
+void xmean_windowed(const dtype *ts, dtype *mu, int len, int winlen){
    dtype u,v,w,x,y;
-   u = a[0];
+   u = ts[0];
    v = 0;
    for(int i = 1; i < winlen; i++){
       w = u;
-      y = a[i];
+      y = ts[i];
       u += y;
       x = u - w;
       v += (w-(u-x))+(y-x);
@@ -94,13 +93,13 @@ void xmean_windowed(dtype *a, dtype *mu, int len, int winlen){
    mu[0] = (u+v)/winlen;
    for(int i = winlen; i < len; i++){
       w = u; 
-      y = -1*a[i-winlen];
+      y = -1*ts[i-winlen];
       u += y;
       x = u - w;
       v += (w-(u-x))+(y-x);
 
       w = u;
-      y = a[i];
+      y = ts[i];
       u += y;
       x = u - w;
       v += (w-(u-x))+(y-x);
@@ -110,14 +109,14 @@ void xmean_windowed(dtype *a, dtype *mu, int len, int winlen){
 
 
 template<typename dtype>
-void sum_windowed(dtype *a, dtype *s, int len, int winlen){
+void sum_windowed(const dtype* ts, dtype *s, int len, int winlen){
    int mlen = len - winlen + 1;
    dtype u,v,w,x,y;
-   u = a[0];
+   u = ts[0];
    v = 0;
    for(int i = 1; i < winlen; i++){
       w = u;
-      y = a[i];
+      y = ts[i];
       u += y;
       x = u - w;
       v += (w-(u-x))+(y-x);
@@ -125,13 +124,13 @@ void sum_windowed(dtype *a, dtype *s, int len, int winlen){
    s[0] = u+v;
    for(int i = winlen; i < len; i++){
       w = u; 
-      y = -1*a[i-winlen];
+      y = -1*ts[i-winlen];
       u += y;
       x = u - w;
       v += (w-(u-x))+(y-x);
 
       w = u;
-      y = a[i];
+      y = ts[i];
       u += y;
       x = u - w;
       v += (w-(u-x))+(y-x);

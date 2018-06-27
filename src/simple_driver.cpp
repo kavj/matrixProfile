@@ -20,7 +20,7 @@ int main(int argc, char* argv[]){
         exit(1);
     }
     int mlen = n-m+1;
-    stridedbuf<double> ts(n);   
+    primbuf<double> ts(n);   
  
     if(!ts.isvalid()){
        printf("failed to allocate memory for time series\n");
@@ -35,12 +35,12 @@ int main(int argc, char* argv[]){
     }
     fclose(f);
     clock_t t1 = clock();
-    stridedbuf<double> mp(ts.len-m+1);
-    stridedbuf<long long>mpi(ts.len-m+1);
+    primbuf<double> mp(ts.len-m+1);
+    primbuf<long long>mpi(ts.len-m+1);
 
     pearson_pauto_reduc(ts,mp,mpi,m,m);
-    writeDoubles("testoutputs/mp",mp.dat,n-m+1);
-    writeLongs("testoutputs/mpi",mpi.dat,n-m+1);
+    writeDoubles("mp",mp.dat,n-m+1);
+    writeLongs("mpi",mpi.dat,n-m+1);
     clock_t t2 = clock();
     printf("time: %lf\n",static_cast<double>((t2-t1))/CLOCKS_PER_SEC);
     return 0;
