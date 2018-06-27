@@ -119,7 +119,7 @@ void pauto_pearson_edge(
    df =   (const double*)__builtin_assume_aligned(df,  prefalign);
    dg =   (const double*)__builtin_assume_aligned(dg,  prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
- 
+
    for(int d = 0; d < std::min(tlen,bound); d++){
       if(cov[d] * invn[0] * invn[d + ofc] > mp[0]){
          mp[0] = cov[d] * invn[0] * invn[d + ofc];  
