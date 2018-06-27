@@ -10,12 +10,12 @@
 // Also: Marked these inline to avoid multiple inclusions due to inlining of other functions. Find a better solution for this.
  
 int paddedlen(int buflen, int alignmt){
-   return buflen + (buflen%alignmt ? alignmt - buflen%alignmt : 0);
+   return buflen + (buflen % alignmt ? alignmt - buflen % alignmt : 0);
 }
 
 void* init_buffer(int buflen, int alignmt){
    void* buf;
-   int chk = posix_memalign((void**)&buf,alignmt,buflen);
+   int chk = posix_memalign((void**)&buf, alignmt, buflen);
    if(chk != 0){
       if((chk == EINVAL) || (chk == ENOMEM)){
          perror("posix_memalign");

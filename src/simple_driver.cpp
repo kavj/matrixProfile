@@ -11,16 +11,16 @@ int main(int argc, char* argv[]){
         printf("check input arguments\n");
         exit(0);
     }
-    int n = atoi(argv[2]);
+    int len = atoi(argv[2]);
     FILE* f = fopen(argv[1],"r");
-    int m = atoi(argv[3]);
+    int sublen = atoi(argv[3]);
     
     if(f == NULL){
         perror("fopen");
         exit(1);
     }
-    int mlen = n-m+1;
-    primbuf<double> ts(n);   
+    int mlen = len - sublen + 1;
+    primbuf<double> ts(len);   
  
     if(!ts.valid()){
        printf("failed to allocate memory for time series\n");
@@ -30,17 +30,17 @@ int main(int argc, char* argv[]){
        printf("null pointer returned\n");
        exit(1);
     }  
-    for(int i = 0; i < n; i++){
-       fscanf(f, "%lf\n", t+i);
+    for(int i = 0; i < len; i++){
+       fscanf(f, "%lf\n", t + i);
     }
     fclose(f);
     clock_t t1 = clock();
-    primbuf<double> mp(ts.len-m+1);
-    primbuf<long long>mpi(ts.len-m+1);
+    primbuf<double> mp(mlen);
+    primbuf<long long>mpi(mlen);
 
-    pearson_pauto_reduc(ts, mp, mpi, m, m);
-    writeDoubles("mp", mp.dat, n - m + 1);
-    writeLongs("mpi", mpi.dat, n - m + 1);
+    pearson_pauto_reduc(ts, mp, mpi, sublen, sublen);
+    writeDoubles("mp", mp.dat, mlen);
+    writeLongs("mpi", mpi.dat, mlen);
     clock_t t2 = clock();
     printf("time: %lf\n", static_cast<double>((t2 - t1))/CLOCKS_PER_SEC);
     return 0;

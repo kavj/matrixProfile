@@ -1,4 +1,6 @@
-#include<algorithm>
+#include <algorithm>
+#include <cstdio>
+#include "tiled_pearson.h"
 #include "../utils/xprec.h"
 #include "../utils/reduce.h"
 #define prefalign 64  // Todo: put this somewhere in build settings, since its used by both allocators and anything that may apply auto vectorization
