@@ -1,6 +1,5 @@
 #include<cstdio>
 #include<ctime>
-#include "utils/alloc.h"
 #include "utils/descriptors.h"
 #include "utils/primitive_print_funcs.h"
 #include "solvers/pearson.h"

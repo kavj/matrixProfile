@@ -1,17 +1,12 @@
-#include <cstdio>
-#include <string>
-#include "primitive_print_funcs.h"
-#include <algorithm>
-#include <cmath>
 #include "../arch/avx256.h"
 #include "reg.h"
-
+#define prefalign 64
 // Todo: Split reference and simd types
 
 
 template<typename dtype>
 void center_query_ref(const dtype* __restrict__ ts, const dtype* __restrict__ mu, dtype* __restrict__ q, int sublen){
-   q = (double*)__builtin_assume_aligned(q,32);
+   q = (double*)__builtin_assume_aligned(q,prefalign);
    for(int i = 0; i < sublen; i++){
       q[i] = ts[i] - mu[0];
    }
@@ -19,11 +14,11 @@ void center_query_ref(const dtype* __restrict__ ts, const dtype* __restrict__ mu
 
 template<typename dtype>
 void center_query(const dtype* __restrict__ ts, const dtype* __restrict__  mu,  dtype* __restrict__ q, int sublen){
-   q = (dtype*) __builtin_assume_aligned(q,32);
-   const int aligned = sublen - sublen%32; 
+   q = (dtype*) __builtin_assume_aligned(q,prefalign);
+   const int aligned = sublen - sublen%prefalign; 
    const int unroll = 8;
    const int simlen = 4;
-   const int loopwid = 32;
+   const int loopwid = prefalign;
    for(int j = 0; j < aligned; j+=loopwid){
       __m256d m = brdcst(mu,0);
       block<__m256d> op;
@@ -53,11 +48,11 @@ void batchcov_ref(const dtype* __restrict__ ts, const dtype* __restrict__ mu, co
 
 template<typename dtype>
 void batchcov(const dtype* __restrict__ ts, const dtype* __restrict__ mu, const dtype* __restrict__ query, dtype* __restrict__ cov, int count, int sublen){
-   cov =   (dtype*)       __builtin_assume_aligned(cov,32);
-   query = (const dtype*) __builtin_assume_aligned(query,32);
-   mu =    (const dtype*) __builtin_assume_aligned(mu,32);
+   cov =   (dtype*)       __builtin_assume_aligned(cov,prefalign);
+   query = (const dtype*) __builtin_assume_aligned(query,prefalign);
+   mu =    (const dtype*) __builtin_assume_aligned(mu,prefalign);
    const int simlen = 4;
-   const int loopwid = 32;
+   const int loopwid = prefalign;
    const int unroll = 8;
    #pragma omp parallel for
    for(int i = 0; i < count; i += loopwid){
