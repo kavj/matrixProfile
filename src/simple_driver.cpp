@@ -35,11 +35,11 @@ int main(int argc, char* argv[]){
     }
     fclose(f);
     clock_t t1 = clock();
-    primbuf<double> mp(mlen);
-    primbuf<long long>mpi(mlen);
+    primbuf<double> mp(mlen, -1.0);
+    primbuf<int>mpi(mlen, -1);
     pearson_pauto_reduc(ts, mp, mpi, sublen, sublen);
     writeDoubles("mp", mp.dat, mlen);
-    writeLongs("mpi", mpi.dat, mlen);
+    writeInts("mpi", mpi.dat, mlen);
     clock_t t2 = clock();
     printf("time: %lf\n", static_cast<double>((t2 - t1))/CLOCKS_PER_SEC);
     return 0;

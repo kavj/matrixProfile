@@ -1,5 +1,5 @@
 
-void pauto_pearson_inner(
+void pauto_pearson_xinner(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
    long long*    __restrict__ mpi,
@@ -10,6 +10,7 @@ void pauto_pearson_inner(
    const int offsetr,
    const int offsetc);
 
+/*
 void pauto_pearson_edge(
    double*       __restrict__ cov,
    double*       __restrict__ mp,
@@ -22,4 +23,4 @@ void pauto_pearson_edge(
    const int offsetc,
    const int bound);
 
-
+*/

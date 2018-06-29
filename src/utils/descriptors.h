@@ -1,7 +1,7 @@
 #ifndef STRIDEDBUF
 #define STRIDEDBUF
+#include <algorithm>
 #include "alloc.h"
-#define prefalign 64
 
 
 template<typename dtype> struct multibuf{
@@ -35,8 +35,15 @@ template<typename dtype> struct primbuf{
    dtype* dat;
    int len;
 
+   primbuf(int buflen, int fillval) : len(buflen) {
+      dat = (buflen > 0) ? reinterpret_cast<dtype*>(init_buffer(paddedlen(buflen, prefalign) * sizeof(dtype), prefalign)) : nullptr;
+      if(dat != nullptr){
+         std::fill(dat, dat + len, fillval); 
+      }
+   }
+
    primbuf(int buflen) : len(buflen) {
-      dat = reinterpret_cast<dtype*>(init_buffer(paddedlen(buflen, prefalign) * sizeof(dtype), prefalign));
+      dat = (buflen > 0) ? reinterpret_cast<dtype*>(init_buffer(paddedlen(buflen, prefalign) * sizeof(dtype), prefalign)) : nullptr;
    }
    
    inline __attribute__((always_inline)) ~primbuf(){

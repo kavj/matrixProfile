@@ -4,6 +4,7 @@
 #include "../utils/xprec.h"
 #include "../utils/reduce.h"
 #define prefalign 64  // Todo: put this somewhere in build settings, since its used by both allocators and anything that may apply auto vectorization
+#define klen 32 
 
 auto pauto_pearson_init_naive = [&](
    double*       __restrict__ cov, 
@@ -171,6 +172,96 @@ void pauto_pearson_inner(
    }
 }*/
 
+
+
+
+
+auto pauto_pearson_init_kern = [&](
+   double*       cov,
+   double*       mp,
+   int*          mpi,
+   const double* df,
+   const double* dg,
+   const double* invn,
+   const int ofr,
+   const int ofc)
+{
+   for(int r = 0; r < klen; r++){
+      for(int d = 0; d < klen; d++){ 
+         if(r > 0){
+            cov[d] += df[r] * dg[r + d + ofc];
+            cov[d] += df[r + d + ofc] * dg[r];
+         }
+         if(mp[r] < cov[d] * invn[r] * invn[r + d + ofc]){
+            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r] = r + d + ofr + ofc;
+	 }
+	 if(mp[r + d + ofc] < cov[d] * invn[r] * invn[r + d + ofc]){
+            mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r + d + ofc] = r + ofr;
+         }
+      }
+   }
+};
+
+static inline void pauto_pearson_kern(
+   double*       __restrict__ cov,
+   double*       __restrict__ mp,
+   int*          __restrict__ mpi,
+   const double* __restrict__ df,
+   const double* __restrict__ dg,
+   const double* __restrict__ invn,
+   const int ofr,
+   const int ofc)
+{
+   cov =  (double*)      __builtin_assume_aligned(cov, prefalign);
+   mp =   (double*)      __builtin_assume_aligned(mp,  prefalign);
+   mpi =  (int*)         __builtin_assume_aligned(mpi, prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,  prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,  prefalign);
+   invn = (const double*)__builtin_assume_aligned(invn,prefalign);
+
+   for(int d = 0; d < klen; d++){ 
+      for(int r = 0; r < klen; r++){
+         cov[d] += df[r] * dg[r + d + ofc];
+         cov[d] += df[r + d + ofc] * dg[r];
+         if(mp[r] < cov[d] * invn[r] * invn[r + d + ofc]){
+            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r] = r + d + ofr + ofc;
+	 }
+	 if(mp[r + d + ofc] < cov[d] * invn[r] * invn[r + d + ofc]){
+            mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r + d + ofc] = r + ofr;
+         }
+      }
+   }  
+}
+
+
+void pauto_pearson_xinner(
+   double*       __restrict__ cov,
+   double*       __restrict__ mp,
+   int*          __restrict__ mpi,
+   const double* __restrict__ df,
+   const double* __restrict__ dg,
+   const double* __restrict__ invn,
+   const int tlen,
+   const int ofr,
+   const int ofc)
+{
+   cov =  (double*)      __builtin_assume_aligned(cov, prefalign);
+   mp =   (double*)      __builtin_assume_aligned(mp,  prefalign);
+   mpi =  (int*)         __builtin_assume_aligned(mpi, prefalign);
+   df =   (const double*)__builtin_assume_aligned(df,  prefalign);
+   dg =   (const double*)__builtin_assume_aligned(dg,  prefalign);
+   invn = (const double*)__builtin_assume_aligned(invn,prefalign);
+
+   for(int d = 0; d < tlen; d += klen){
+      for(int r = 0; r < tlen; r += klen){ 
+         pauto_pearson_kern(cov+d,mp+r,mpi+r,df+r,dg+r,invn+r,ofr+r,ofc+d);
+      }
+   }
+}
 
 void pauto_pearson_inner(
    double*       __restrict__ cov,
