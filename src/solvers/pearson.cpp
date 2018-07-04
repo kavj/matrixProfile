@@ -18,7 +18,8 @@ static void init_dfdg(const dtype* __restrict__ ts, const dtype* __restrict__ mu
 }
 
 
-auto pauto_pearson_kern = [&](
+template<int ofs>
+static inline void pauto_pearson_kern(
    double*       cov,
    double*       mp,
    int*          mpi,
@@ -28,12 +29,17 @@ auto pauto_pearson_kern = [&](
    const int ofr,
    const int ofc)
 {
-   for(int r = 0; r < klen; r++){
+   cov  = (double*)__builtin_assume_aligned(cov, prefalign, ofs);
+   df   = (const double*)__builtin_assume_aligned(df, prefalign, ofs);
+   dg   = (const double*)__builtin_assume_aligned(dg, prefalign, ofs);
+   mp   = (double*) __builtin_assume_aligned(mp, prefalign, ofs);
+   mpi  = (int*) __builtin_assume_aligned(mpi, prefalign, ofs);
+   invn = (const double*)__builtin_assume_aligned(invn, prefalign, ofs);
+   
+   for(int r = ofs; r < klen; r++){
       for(int d = 0; d < klen; d++){ 
-         if(r > 0){
-            cov[d] += df[r] * dg[r + d + ofc];
-            cov[d] += df[r + d + ofc] * dg[r];
-         }
+         cov[d] += df[r] * dg[r + d + ofc];
+         cov[d] += df[r + d + ofc] * dg[r];
          if(mp[r] < cov[d] * invn[r] * invn[r + d + ofc]){
             mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
             mpi[r] = r + d + ofr + ofc;
@@ -47,7 +53,7 @@ auto pauto_pearson_kern = [&](
 };
 
 
-auto pauto_pearson_edge = [&](
+auto pauto_pearson_init_edge = [&](
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    int*          __restrict__ mpi, 
@@ -76,7 +82,36 @@ auto pauto_pearson_edge = [&](
 };
 
 
-auto pauto_pearson_init = [&](
+static inline void pauto_pearson_edge(
+   double*       __restrict__ cov, 
+   double*       __restrict__ mp,  
+   int*          __restrict__ mpi, 
+   const double* __restrict__ df,  
+   const double* __restrict__ dg, 
+   const double* __restrict__ invn, 
+   int ofr, 
+   int ofc, 
+   int dlim,
+   int clim)
+{
+   for(int d = 0; d < dlim; d++){
+      for(int r = 0; r < clim - d; r++){
+         cov[d] += df[r] * dg[r + d + ofc];
+         cov[d] += df[r + d + ofc]*dg[r];
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r]){
+            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r] = r + d + ofc + ofr;
+         }
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
+            mp[r+d+ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r+d+ofc] = r + ofr;
+         }
+      }
+   }
+}
+
+
+static inline void pauto_pearson_init(
    const double* __restrict__ cov, 
    double*       __restrict__ mp,  
    int*          __restrict__ mpi, 
@@ -113,13 +148,12 @@ auto pauto_pearson_init = [&](
          mpi[d+ofc] = ofr;
       }
    }
-};
+}
 
 
-void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int sublen){
+int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int sublen){
    if(!(ts.valid() && mp.valid() && mpi.valid())){
-      printf("bad inputs\n");
-      exit(1);
+      return errs::bad_inputs;
    }
    const int mlen = ts.len - sublen + 1;
    const int tlen = std::max(16384, 4 * sublen - (4 * sublen) % klen);  
@@ -127,8 +161,7 @@ void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int suble
    dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
    dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim, sublen);
    if(!(mu.valid() && df.valid() && dg.valid() && invn.valid())){
-      printf("error allocating memory\n");
-      exit(1);  // Todo: Exceptions should be thrown on memory allocation issues, or we could add a return value
+      return errs::mem_error;
    }
    xmean_windowed(ts(0), mu(0), ts.len, sublen);
    xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
@@ -137,25 +170,29 @@ void pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int suble
    for(int i = 0; i < tilesperdim; i++){
       center_query(ts(i * tlen), mu(i * tlen), q(i), sublen); 
    }
-   const int fringe = (mlen - minlag) % klen;
+   const int kal = mlen - minlag - (mlen - minlag) % klen;
    for(int diag = minlag; diag < mlen; diag += tlen){
       #pragma omp parallel for
       for(int ofst = 0; ofst < mlen - diag; ofst += tlen){
-         const int dmx = std::min(diag + tlen, mlen - ofst - fringe);
-         batchcov(ts(diag + ofst), mu(diag + ofst), q(ofst/tlen), cov(ofst), dmx - diag, sublen);
-         pauto_pearson_init(cov(ofst), mp(ofst), mpi(ofst), invn(ofst), ofst, diag, dmx - diag);
-         for(int d = diag; d < dmx; d += klen){
-            const int rmx = std::min(ofst + tlen, mlen - fringe - d);
-            //Todo: need a truncated kernel here          
-            for(int r = ofst + klen; r < rmx; r += klen){
-               pauto_pearson_kern(cov(ofst + d - diag), mp(r), mpi(r), df(r), dg(r), invn(r), r, d);
+         const int dlim = std::min(diag + tlen, mlen - ofst);
+         batchcov(ts(diag + ofst), mu(diag + ofst), q(ofst/tlen), cov(ofst), dlim - diag, sublen);
+         for(int d = diag; d < dlim; d += klen){
+            const int rlim = std::min(ofst + tlen, mlen - diag);
+            const int ral = std::min(rlim, kal - d);
+            pauto_pearson_init(cov(ofst + d - diag), mp(ofst), mpi(ofst), invn(ofst), ofst, d, dlim - diag);
+            if(ofst + klen < ral){
+               // first section
+               for(int r = ofst + klen; ofst < ral; r += klen){
+                  pauto_pearson_kern<0>(cov(ofst + d - diag), mp(r), mpi(r), df(r), dg(r), invn(r), r, d);
+               }
             }
-         }
-         if(diag + ofst + 2 * tlen > mlen){
-            // tile fringe 
+            if(ral < rlim){
+               pauto_pearson_edge(cov(ofst + d - diag), mp(ral), mpi(ral), df(ral), dg(ral), invn(ral), ral, d, dlim, mlen);
+            }
          }
       }
    }
+   return errs::none;
 }
 
 
