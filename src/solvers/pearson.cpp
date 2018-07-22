@@ -52,7 +52,7 @@ static inline void pauto_pearson_kern(
 }
 
 
-static inline void pauto_pearson_edge(
+static void pauto_pearson_edge(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    int*          __restrict__ mpi, 
@@ -64,26 +64,24 @@ static inline void pauto_pearson_edge(
    int dlim,
    int clim)
 {
-   double c = *cov;
    for(int d = 0; d < dlim; d++){
       for(int r = 0; r < clim - d; r++){
-         c += df[r] * dg[r + d + ofc];
-         c += df[r + d + ofc]*dg[r];
-         if(c * invn[r] * invn[r + d + ofc] > mp[r]){
-            mp[r] = c * invn[r] * invn[r + d + ofc];
+         cov[d] += df[r] * dg[r + d + ofc];
+         cov[d] += df[r + d + ofc]*dg[r];
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r]){
+            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
             mpi[r] = r + d + ofc + ofr;
          }
-         if(c * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
-            mp[r + d + ofc] = c * invn[r] * invn[r + d + ofc];
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
+            mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
             mpi[r + d + ofc] = r + ofr;
          }
       }
    }
-   *cov = c;
 }
 
 
-static inline void pauto_pearson_corner(
+static void pauto_pearson_corner(
    double*       __restrict__ cov, 
    double*       __restrict__ mp,  
    int*          __restrict__ mpi, 
@@ -96,12 +94,12 @@ static inline void pauto_pearson_corner(
    int clim)
 {
    for(int d = 0; d < dlim; d++){
-      if(cov[0] * invn[0] * invn[d + ofc] > mp[r]){
+      if(cov[0] * invn[0] * invn[d + ofc] > mp[0]){
          mp[0] = cov[0] * invn[0] * invn[d + ofc];
          mpi[0] = d + ofc + ofr;
       }
       if(cov[d] * invn[0] * invn[d + ofc] > mp[d + ofc]){
-         mpr[d + ofc] = cov[0] * invn[0] * invn[d + ofc];
+         mp[d + ofc] = cov[0] * invn[0] * invn[d + ofc];
          mpi[d + ofc] = ofr;
       }
    }
@@ -109,35 +107,24 @@ static inline void pauto_pearson_corner(
 }
 
 
-// changing this to be aligned init only
-static inline void pauto_pearson_init(
-   const double* __restrict__ cov, 
+static void pauto_pearson_init(
+   double* __restrict__ cov, 
+   const double* __restrict__ df,
+   const double* __restrict__ dg,
    double*       __restrict__ mp,  
    int*          __restrict__ mpi, 
    const double* __restrict__ invn, 
    int ofr, 
-   int ofc, 
-   int dlim)
+   int ofc)
 {
-   cov  = (const double*)__builtin_assume_aligned(cov,prefalign);
+   cov  = (double*)__builtin_assume_aligned(cov,prefalign);
+   df   = (const double*) __builtin_assume_aligned(df, prefalign);
+   dg   = (const double*) __builtin_assume_aligned(dg, prefalign);
    mp   = (double*) __builtin_assume_aligned(mp,prefalign);
    mpi  = (int*) __builtin_assume_aligned(mpi,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
-   int fringe = dlim % klen;
-   for(int d = 0; d < dlim - fringe; d += klen){
-      for(int sd = d; sd < d + klen; sd++){
-         if(cov[d] * invn[0] * invn[d + ofc] > mp[0]){
-            mp[0] = cov[d] * invn[0] * invn[d + ofc];
-            mpi[0] = d + ofc + ofr;
-         }
-         if(cov[d] * invn[0] * invn[d + ofc] > mp[d + ofc]){
-            mp[d+ofc] = cov[d] * invn[0] * invn[d + ofc];
-            mpi[d+ofc] = ofr;
-         }
-      }
-   }
-   for(int d = dlim - fringe; d < dlim; d++){
+   for(int d = 0; d < klen; d++){
       if(cov[d] * invn[0] * invn[d + ofc] > mp[0]){
          mp[0] = cov[d] * invn[0] * invn[d + ofc];
          mpi[0] = d + ofc + ofr;
@@ -147,23 +134,36 @@ static inline void pauto_pearson_init(
          mpi[d+ofc] = ofr;
       }
    }
+   for(int d = 0; d < klen; d++){
+      for(int r = 1; r < klen; r++){
+         cov[d] += df[r] * dg[r + d + ofc];
+         cov[d] += df[r + d + ofc] * dg[r];
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r]){
+            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r] = r + d + ofc + ofr;
+         }
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
+            mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r + d + ofc] = r + ofr;
+         } 
+      }
+   }
 }
 
-// Note to self: The std::min expressions can be used to organize various boundary conditions in a way that they can be quickly verified by hand
-// Later on it would probably be more readable if they're factored out into temporary variables. 
 
-
-// Note: The prior function was extremely difficult to test. Since the fixed sized kernels run klen * klen updates, we can only worry about alignment here.
-// This means if diagonal + offset + 2 * klen <= mlen, then we can process a full kernel. The extra statements just handle two other cases, the one where we have an initialized block
-// where some updates may be unaligned and the case where we can't even initialize a full section. The former processes a block of size klen in one direction and iterates over the other to either a tile boundary
-// or an edge column. The other basically folds in the initialization step and processes however many diagonals remain then runs the same basic process to the last column.
-
-// This was really really annoying to work out, but it's much easier to verify boundary conditions now due to the lack of obfuscation.
+// Todos: This appears to have a resurfaced range bug, but the loop ranges are quite a bit clearer due to alignment checks being restricted to the innermost tile.
+//        At this point we never process more than kernel len in either direction in a single loop block,
+//        and we determine alignment based only on that condition. This makes it easier to either step through in a 
+//        debugger or print the indices per starting position to verify start and end conditions. 
+//
+//
+//        Once that's resolved we should swap in the intrinsics based kernel anytime we're not in the initialization phase.
+//        Then we should eventually make it possible to run this on Windows by supporting their aligned allocator and Visual C++ syntax for restrict and force inline
+//        under the names noalias and stronginline or something similar. 
 
 int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int sublen){
    if(!(ts.valid() && mp.valid() && mpi.valid())){
-      return -1;
-      //return errs::bad_input;  // need to write the supporting namespace for this
+      return errs::bad_input;  // need to write the supporting namespace for this
    }
    const int mlen = ts.len - sublen + 1;
    const int tlen = std::max(2 << 15, 4 * sublen - (4 * sublen) % klen);        
@@ -171,8 +171,7 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int sublen
    dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
    dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim, sublen);
    if(!(mu.valid() && df.valid() && dg.valid() && invn.valid())){
-       return -1;
-      //return errs::mem_error;
+      return errs::mem_error;
    }
    xmean_windowed(ts(0), mu(0), ts.len, sublen);
    xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
@@ -190,30 +189,20 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int sublen
          batchcov(ts(diag + ofst), mu(diag + ofst), q(ofst/tlen), cov(ofst), dlim, sublen);
          const int dalim = std::min(tlen, kal - diag - ofst - klen);
          for(int d = diag; d < diag + dalim; d += klen){
-            pauto_pearson_init(cov(d - diag + ofst), mp(ofst), mpi(ofst), invn(ofst), ofst, d, klen);
+            pauto_pearson_init(cov(d - diag + ofst), df(ofst), dg(ofst), mp(ofst), mpi(ofst), invn(ofst), ofst, d);
             const int ralim = std::min(tlen, kal - d - ofst); 
             for(int r = ofst + klen; r < ofst + ralim; r += klen){
-               
+               pauto_pearson_kern(cov(d - diag + ofst), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d);
             }
-            if(d + ofst + klen + tlen > mlen){
-               // This shouldn't be inline, but these are the appropriate semantics
-               // should go from column == kal to min(mlen, row + tlen)
-               // that's why kal - d is a starting point for row val
-               for(int sd = d; sd < d + klen; sd++){
-                  const int re = std::min(tlen, mlen - sd - ofst);
-                  for(int r = kal - d; r < re; r++){
-                     
-                  }
-               }
-            }
+            if(ralim < tlen){
+               pauto_pearson_edge(cov(d - diag + ofst + ralim), mp(ofst + ralim), mpi(ofst + ralim), df(ofst + ralim), dg(ofst + ralim), invn(ofst + ralim), ofst + ralim, d, klen, mlen - d - ralim);
+            }   
          }
-         for(int d = dalim; d < dlim; d++){ 
-            // corners, basically single diagonal 
-
+         if(dalim < tlen){
+            pauto_pearson_corner(cov(dalim + ofst), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, diag + dalim, dlim - dalim, mlen - diag - dalim - ofst); 
          }
       }
    }
-   return 0;
-   //return errs::none;
+   return errs::none;
 }
 
