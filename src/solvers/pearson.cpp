@@ -17,8 +17,7 @@ static void dfdg_init(const dtype* __restrict__ ts, const dtype* __restrict__ mu
    }
 }
 
-
-static inline void pauto_pearson_kern(
+void pauto_pearson_kern(
    double*       cov,
    double*       mp,
    int*          mpi,
@@ -39,14 +38,22 @@ static inline void pauto_pearson_kern(
       for(int d = 0; d < klen; d++){ 
          cov[d] += df[r] * dg[r + d + ofc];
          cov[d] += df[r + d + ofc] * dg[r];
-         if(mp[r] < cov[d] * invn[r] * invn[r + d + ofc]){
-            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
-            mpi[r] = r + d + ofr + ofc;
-	 }
-	 if(mp[r + d + ofc] < cov[d] * invn[r] * invn[r + d + ofc]){
-            mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+      }
+      double a[klen];
+      for(int d = 0; d < klen; d++){
+         a[d] = cov[d] * invn[r] * invn[r + d + ofc];
+      }
+      for(int d = 0; d < klen; d++){
+	 if(mp[r + d + ofc] < a[d]){
+            mp[r + d + ofc] = a[d];
             mpi[r + d + ofc] = r + ofr;
          }
+      }
+      for(int d = 0; d < klen; d++){
+         if(mp[r] < a[d]){
+            mp[r] = a[d];
+            mpi[r] = r + d + ofr + ofc;
+	 }
       }
    }
 }
@@ -124,25 +131,38 @@ static void pauto_pearson_init(
    mpi  = (int*) __builtin_assume_aligned(mpi,prefalign);
    invn = (const double*)__builtin_assume_aligned(invn,prefalign);
 
+   double cbuf[klen];
    for(int d = 0; d < klen; d++){
-      if(cov[d] * invn[0] * invn[d + ofc] > mp[0]){
+      cbuf[d] = cov[d] * invn[0] * invn[d + ofc];
+   }
+   for(int d = 0; d < klen; d++){
+      if(mp[0] < cbuf[d]){
          mp[0] = cov[d] * invn[0] * invn[d + ofc];
          mpi[0] = d + ofc + ofr;
       }
-      if(cov[d] * invn[0] * invn[d + ofc] > mp[d + ofc]){
-         mp[d+ofc] = cov[d] * invn[0] * invn[d + ofc];
+   }
+   for(int d = 0; d < klen; d++){
+      if(mp[d + ofc] < cbuf[d]){
+         mp[d+ofc] = cbuf[d];
          mpi[d+ofc] = ofr;
       }
    }
-   for(int d = 0; d < klen; d++){
-      for(int r = 1; r < klen; r++){
+   for(int r = 1; r < klen; r++){
+      for(int d = 0; d < klen; d++){
          cov[d] += df[r] * dg[r + d + ofc];
          cov[d] += df[r + d + ofc] * dg[r];
-         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r]){
+      }
+      for(int d = 0; d < klen; d++){
+         cbuf[d] = cov[d] * invn[r] * invn[r + d + ofc];
+      }
+      for(int d = 0; d < klen; d++){
+         if(mp[r] < cbuf[d]){
             mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
             mpi[r] = r + d + ofc + ofr;
          }
-         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
+      }
+      for(int d = 0; d < klen; d++){
+         if(mp[r + d + ofc] < cbuf[d]){
             mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
             mpi[r + d + ofc] = r + ofr;
          } 
@@ -191,14 +211,17 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int sublen
          for(int d = diag; d < diag + dalim; d += klen){
             pauto_pearson_init(cov(d - diag + ofst), df(ofst), dg(ofst), mp(ofst), mpi(ofst), invn(ofst), ofst, d);
             const int ralim = std::min(tlen, kal - d - ofst); 
+            printf("dalim: %d ralim %d\n",dalim, ralim);
             for(int r = ofst + klen; r < ofst + ralim; r += klen){
                pauto_pearson_kern(cov(d - diag + ofst), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d);
             }
             if(ralim < tlen){
-               pauto_pearson_edge(cov(d - diag + ofst + ralim), mp(ofst + ralim), mpi(ofst + ralim), df(ofst + ralim), dg(ofst + ralim), invn(ofst + ralim), ofst + ralim, d, klen, mlen - d - ralim);
+               printf("edge: offset: %d, row lim: %d\n", ofst + ralim, mlen - d - ofst - ralim);
+               pauto_pearson_edge(cov(d - diag + ofst + ralim), mp(ofst + ralim), mpi(ofst + ralim), df(ofst + ralim), dg(ofst + ralim), invn(ofst + ralim), ofst + ralim, d, klen, mlen - d - ofst - ralim);
             }   
          }
          if(dalim < tlen){
+            printf("corner: diag lim: %d column lim: %d\n", dlim - dalim, mlen - diag - dalim - ofst); 
             pauto_pearson_corner(cov(dalim + ofst), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, diag + dalim, dlim - dalim, mlen - diag - dalim - ofst); 
          }
       }
