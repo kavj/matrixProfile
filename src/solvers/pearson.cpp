@@ -46,11 +46,11 @@ static inline void pauto_pearson_kern(
       for(long long i = 0; i < 64; i++){ // if we write this in the obvious way using conditional statements, gcc 7.3 is unable to generate
                                    // a max reduction via masked writes or blend operations. I'll file a bug report at some point.
          ci[i] = cr[i] > cr[i + 64] ? i : i + 64;
-         cr[i] = cr[i] > ci[i + 64] ? cr[i] : cr[i + 64];
+         cr[i] = cr[i] > cr[i + 64] ? cr[i] : cr[i + 64];
       }
       for(int i = 0; i < 32; i++){
          ci[i] = cr[i] > cr[i + 32] ? ci[i] : ci[i + 32];
-         cr[i] = cr[i] > ci[i + 32] ? cr[i] : cr[i + 32];
+         cr[i] = cr[i] > cr[i + 32] ? cr[i] : cr[i + 32];
       } 
       for(int i = 0; i < 16; i++){
          ci[i] = cr[i] > cr[i + 16] ? ci[i] : ci[i + 16];
