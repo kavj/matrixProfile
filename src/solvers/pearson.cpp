@@ -6,19 +6,20 @@
 #include "../utils/primitive_print_funcs.h"
 #include "tiled_pearson.h"
 #include "pearson.h"
-#define klen 128 
+constexpr long long klen  = 128; 
 
 static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ df, double* __restrict__ dg, long long len, long long sublen){
    df[0] = 0;
    dg[0] = 0;
    for(int i = 0; i < len - sublen; i++){
-      df[i + 1] = (ts[i + sublen] - mu[i + 1]) + (ts[i] - mu[i]);
-      dg[i + 1] = (ts[i + sublen] - ts[i])/2.0;
+      df[i + 1] = (ts[i + sublen] - ts[i])/2.0;
+      dg[i + 1] = (ts[i + sublen] - mu[i + 1]) + (ts[i] - mu[i]);
    }
 }
 
-// It is probably a better idea to externally allocate these buffers, since this is generating a ridiculous amount of stack traffic 
-// and the current method prevents refactoring of pairwise max pooling. Unfortunately it drives the fused kernel and reference further apart, and it would cause a divergence in function signatures. Until the implementation stabilizes, we will just live with the lack of refactoring.
+// It might be better to pass external buffers for this rather than rely on stack space, but it shouldn't typically make much difference.
+// This is designed to be optimization friendly in that the pointers may be aligned to a preferred boundary and iteration starts from the 0th index. 
+// With the current design, we might be able to skip that, but the rest is basically necessary. The outer loop in particular allows hoisting loads outside the main loop on architectures that provide a sufficient number of register names without imposing api restrictions.
 
 static void pauto_pearson_simple(
    double*       __restrict__  cov,
@@ -29,12 +30,10 @@ static void pauto_pearson_simple(
    const double* __restrict__ invn,
    const long long ofr,
    const long long ofc,
-   const long long iters,
-   const bool init)
+   const long long iters)
 {
    for(long long r = 0; r < iters; r++){
-      //double cr[128];
-      if(!init || r != 0){
+      if(r != 0){
          for(long long d = 0; d < 128; d++){ 
             cov[d] += df[r] * dg[r + d + ofc];
             cov[d] += df[r + d + ofc] * dg[r];
@@ -42,9 +41,12 @@ static void pauto_pearson_simple(
       }
       for(int d = 0; d < 128; d++){
          double cr = cov[d] * invn[r] * invn[r + d + ofc];
-         if((cr > 1) || (cr < -1)){
-            printf("simple makes me sad\n");
-         }
+         if((r + ofr == 78662) && (r + ofr + d + ofc >= 130700)){
+           // printf("r: %d r + ofr: %d d: %d d + ofc : %d r + d + ofr + ofc: %d\n", r, r + ofr, d, d + ofc, r + d + ofr + ofc);
+         } 
+         /*if((r + ofr >= 78592) && (r + d + ofr + ofc >= 130780)){
+            printf("check\n");
+         } */
          if(mp[r] < cr){
             mp[r] = cr;
             mpi[r] = r + d + ofr + ofc;
@@ -57,6 +59,7 @@ static void pauto_pearson_simple(
    }
 }
 
+
 void pauto_pearson_kern(
    double*       __restrict__  cov,
    double*       __restrict__  mp,
@@ -66,8 +69,7 @@ void pauto_pearson_kern(
    const double* __restrict__ invn,
    const long long ofr,
    const long long ofc,
-   const long long iters,
-   const bool init)
+   const long long iters)
 {
    df   = (const double*)__builtin_assume_aligned(df, prefalign);
    dg   = (const double*)__builtin_assume_aligned(dg, prefalign);
@@ -77,7 +79,7 @@ void pauto_pearson_kern(
    cov  = (double*)__builtin_assume_aligned(cov, prefalign);
    for(long long r = 0; r < iters; r++){
       double cr[128];
-      if(!init || r != 0){
+      if(r != 0){
          for(long long d = 0; d < 128; d++){ 
             cov[d] += df[r] * dg[r + d + ofc];
             cov[d] += df[r + d + ofc] * dg[r];
@@ -114,9 +116,6 @@ void pauto_pearson_kern(
       }
       ci[0] = cr[0] > cr[1] ? ci[0] : ci[1];
       cr[0] = cr[0] > cr[1] ? cr[0] : cr[1];
-      if(cr[0] > 1.0){
-         printf("this makes me sad\n");
-      }
       mpi[r] = mp[r] > cr[0] ? mpi[r] : ci[0] + ofr + ofc;
       mp[r] =  mp[r] > cr[0] ? mp[r] : cr[0];
    }
@@ -130,27 +129,25 @@ static inline void pauto_pearson_edge(
    const double* __restrict__ dg, 
    const double* __restrict__ invn, 
    const long long ofr, 
-   const long long ofc, 
+   const long long ofd, 
    const long long dlim,
    const long long clim,
    const bool init)
 {
-   for(long long d = 0; d < dlim; d++){
-      for(long long r = 0; r < clim - d; r++){
-         if(!init || r != 0){
-            cov[d] += df[r] * dg[r + d + ofc];
-            cov[d] += df[r + d + ofc] * dg[r];
+   for(long long d = ofd; d < dlim; d++){
+      for(long long r = ofr; r < clim - d; r++){
+         if(!init || r != ofr){
+            cov[d - ofd] += df[r] * dg[r + d];
+            cov[d - ofd] += df[r + d] * dg[r];
          }
-         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r]){
-            mp[r] = cov[d] * invn[r] * invn[r + d + ofc];
-            mpi[r] = r + d + ofc + ofr;
+         double cr = cov[d - ofd] * invn[r] * invn[r + d];
+         if(mp[r] < cr){
+            mp[r] = cr;
+            mpi[r] = r + d;
          }
-         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
-            mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
-            mpi[r + d + ofc] = r + ofr;
-         }
-         if(cov[d] * invn[r] * invn[r + d + ofc] > 1.0){
-            printf("This edge makes me sad, row: %d col: %d cov: %lf \n", r + ofr, r + d + ofr + ofc, cov[d]);
+         if(mp[r + d] < cr){
+            mp[r + d] = cr;
+            mpi[r + d] = r;
          }
       }
    }
@@ -213,16 +210,8 @@ int pearson_pauto_reduc_ref(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, 
    dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
    center_query(ts(0), mu(0), q(0), sublen); 
    batchcov(ts(minlag), mu(minlag), q(0), cov(0), mlen - minlag, sublen);
-   writeDoubles("/home/kkamg001/matlabscripts/cppoutput/q",q(0),sublen);
-   writeDoubles("/home/kkamg001/matlabscripts/cppoutput/cov",cov(0),mlen);
-   writeDoubles("/home/kkamg001/matlabscripts/cppoutput/mu",mu(0),mlen);
-   writeDoubles("/home/kkamg001/matlabscripts/cppoutput/df",df(0),mlen);
-   writeDoubles("/home/kkamg001/matlabscripts/cppoutput/dg",dg(0),mlen);
-   writeDoubles("/home/kkamg001/matlabscripts/cppoutput/invn",invn(0),mlen);
    
    pearson_pauto_reference_solve(cov(0), mp(0), mpi(0), df(0), dg(0), invn(0), minlag, mlen, sublen);  
-   writeLongs("/home/kkamg001/matlabscripts/cppoutput/mpi",mpi(0),mlen);
-   writeDoubles("/home/kkamg001/matlabscripts/cppoutput/mp",mp(0),mlen);
  
    return errs::none;
 }
@@ -243,6 +232,7 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
    xmean_windowed(ts(0), mu(0), ts.len, sublen);
    xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
    dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
+ 
    #pragma omp parallel for
    for(long long i = 0; i < mlen; i+= tlen){
       center_query(ts(i), mu(i), q(i/tlen), sublen); 
@@ -250,33 +240,18 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
    for(long long diag = minlag; diag < mlen; diag += tlen){
       #pragma omp parallel for
       for(long long ofst = 0; ofst < mlen - diag; ofst += tlen){
-         const long long dlim = std::min(tlen, mlen - diag - ofst);
-         batchcov(ts(diag + ofst), mu(diag + ofst), q(ofst/tlen), cov(ofst), dlim, sublen);
+         const long long dlim = std::min(diag + tlen, mlen - ofst);
+         batchcov(ts(diag + ofst), mu(diag + ofst), q(ofst/tlen), cov(ofst), dlim - diag, sublen);
          for(long long d = diag; d < dlim; d += klen){
-            const long long rlim = std::min(tlen, mlen - d - ofst);
-            const long long rfringe = rlim % klen;
-            pauto_pearson_simple(cov(ofst + d - diag), 
-                               mp(ofst), 
-                               mpi(ofst), 
-                               df(ofst), 
-                               dg(ofst), 
-                               invn(ofst), 
-                               ofst, 
-                               d, 
-                               rlim - rfringe,
-                               true);
-            if(rfringe > 0){
-               pauto_pearson_edge(cov(ofst + d - diag), 
-                                  mp(ofst), 
-                                  mpi(ofst), 
-                                  df(ofst), 
-                                  dg(ofst), 
-                                  invn(ofst), 
-                                  ofst, 
-                                  diag + d, 
-                                  klen, 
-                                  rfringe,
-                                  rlim - rfringe - ofst == 0);
+            if(diag + klen <= dlim){
+               const long long ral = std::max(static_cast<long long>(0), std::min(tlen, mlen - d - ofst - klen)); // stupid compiler
+               pauto_pearson_simple(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral); 
+               if(ral < tlen){
+                  pauto_pearson_edge(cov(ofst + d - diag), mp(0), mpi(0), df(0), dg(0), invn(0), ofst + ral, d, d + klen, mlen, false);
+               }
+            }
+            else{
+               pauto_pearson_edge(cov(ofst + d - diag), mp(0), mpi(0), df(0), dg(0), invn(0), ofst, d, dlim, mlen, true);
             }
          }
       }
