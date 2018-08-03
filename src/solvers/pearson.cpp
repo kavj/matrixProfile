@@ -87,7 +87,12 @@ void pauto_pearson_kern(
       }
       for(long long d = 0; d < 128; d++){
          cr[d] = cov[d] * invn[r] * invn[r + d + ofc];
+         if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
+            mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
+            mpi[r + d + ofc] = r + ofr;
+         }
       }
+      
       long long ci[64];
       for(long long i = 0; i < 64; i++){ // if we write this in the obvious way using conditional statements, gcc 7.3 is unable to generate
                                    // a max reduction via masked writes or blend operations. I'll file a bug report at some point.
@@ -116,7 +121,7 @@ void pauto_pearson_kern(
       }
       ci[0] = cr[0] > cr[1] ? ci[0] : ci[1];
       cr[0] = cr[0] > cr[1] ? cr[0] : cr[1];
-      mpi[r] = mp[r] > cr[0] ? mpi[r] : ci[0] + ofr + ofc;
+      mpi[r] = mp[r] > cr[0] ? mpi[r] : ci[0] + r + ofr + ofc;
       mp[r] =  mp[r] > cr[0] ? mp[r] : cr[0];
    }
 }
@@ -245,7 +250,8 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
          for(long long d = diag; d < dlim; d += klen){
             if(diag + klen <= dlim){
                const long long ral = std::max(static_cast<long long>(0), std::min(tlen, mlen - d - ofst - klen)); // stupid compiler
-               pauto_pearson_simple(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral); 
+               pauto_pearson_kern(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral);
+               //pauto_pearson_simple(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral); 
                if(ral < tlen){
                   pauto_pearson_edge(cov(ofst + d - diag), mp(0), mpi(0), df(0), dg(0), invn(0), ofst + ral, d, d + klen, mlen, false);
                }
