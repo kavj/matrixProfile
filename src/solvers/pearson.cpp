@@ -17,42 +17,6 @@ static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ 
    }
 }
 
-// It might be better to pass external buffers for this rather than rely on stack space, but it shouldn't typically make much difference.
-// This is designed to be optimization friendly in that the pointers may be aligned to a preferred boundary and iteration starts from the 0th index. 
-// With the current design, we might be able to skip that, but the rest is basically necessary. The outer loop in particular allows hoisting loads outside the main loop on architectures that provide a sufficient number of register names without imposing api restrictions.
-
-static void pauto_pearson_simple(
-   double*       __restrict__  cov,
-   double*       __restrict__  mp,
-   long long*    __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
-   const long long ofr,
-   const long long ofc,
-   const long long iters)
-{
-   for(long long r = 0; r < iters; r++){
-      if(r != 0){
-         for(long long d = 0; d < 128; d++){ 
-            cov[d] += df[r] * dg[r + d + ofc];
-            cov[d] += df[r + d + ofc] * dg[r];
-         }
-      }
-      for(int d = 0; d < 128; d++){
-         double cr = cov[d] * invn[r] * invn[r + d + ofc];
-         if(mp[r] < cr){
-            mp[r] = cr;
-            mpi[r] = r + d + ofr + ofc;
-         }
-         if(mp[r + d + ofc] < cr){
-            mp[r + d + ofc] = cr;
-            mpi[r + d + ofc] = r + ofr;
-         }
-      }
-   }
-}
-
 
 void pauto_pearson_kern(
    double*       __restrict__  cov,
@@ -151,70 +115,6 @@ static inline void pauto_pearson_edge(
       }
    }
 }
-
-
-
-void pearson_pauto_reference_solve(double*       __restrict__ cov, 
-                                   double*       __restrict__ mp, 
-                                   long long*    __restrict__ mpi, 
-                                   const double* __restrict__ df, 
-                                   const double* __restrict__ dg, 
-                                   const double* __restrict__ invn,
-                                   const long long minlag, 
-                                   const long long mlen, 
-                                   const long long sublen){
-   if((cov == nullptr) || (mp == nullptr) || (mpi == nullptr) || 
-      (df == nullptr)  || (dg == nullptr) || (invn == nullptr)){
-      printf("problem in solver input\n");
-      exit(1);
-   }
-
-   for(int diag = minlag; diag < mlen; diag++){
-      double c = cov[diag - minlag];
-      if(mp[0] < c * invn[0] * invn[diag]){
-         mp[0] = c * invn[0] * invn[diag];
-         mpi[0] = diag;
-      }
-      if(mp[diag] < c * invn[0] * invn[diag]){
-         mp[diag] = c * invn[0] * invn[diag];
-         mpi[diag] = 0;
-      }
-      for(int ofst = 0; ofst < mlen - diag; ofst++){
-         c += df[ofst] * dg[diag + ofst];
-         c += df[diag + ofst] * dg[ofst];
-         if(mp[ofst] < (c * invn[ofst] * invn[diag + ofst])){
-            mp[ofst] = c * invn[ofst] * invn[diag + ofst];
-            mpi[ofst] = diag + ofst;
-         }
-         if(mp[diag + ofst] < c * invn[ofst] * invn[diag + ofst]){
-            mp[diag + ofst] = c * invn[ofst] * invn[diag + ofst];
-            mpi[diag + ofst] = ofst;
-         }
-      }
-   }
-}
-
-int pearson_pauto_reduc_ref(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long long sublen){
-   if(!(ts.valid() && mp.valid() && mpi.valid())){
-      return errs::bad_input;  // need to write the supporting namespace for this
-   }
-   const long long mlen = ts.len - sublen + 1;
-   dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
-   dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(1, sublen);
-   if(!(mu.valid() && df.valid() && dg.valid() && invn.valid())){
-      return errs::mem_error;
-   }
-   xmean_windowed(ts(0), mu(0), ts.len, sublen);
-   xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
-   dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
-   center_query(ts(0), mu(0), q(0), sublen); 
-   batchcov(ts(minlag), mu(minlag), q(0), cov(0), mlen - minlag, sublen);
-   
-   pearson_pauto_reference_solve(cov(0), mp(0), mpi(0), df(0), dg(0), invn(0), minlag, mlen, sublen);  
- 
-   return errs::none;
-}
-  
 
 int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long long sublen){
    if(!(ts.valid() && mp.valid() && mpi.valid())){
