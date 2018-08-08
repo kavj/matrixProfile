@@ -58,9 +58,6 @@ template<typename dtype> struct primbuf{
       return (i < len) ? (dat + i) : nullptr;
    }
 
-   inline dtype*  __attribute__((always_inline)) operator()(long long i){ 
-      return (i < len) ? (dat + i) : nullptr;
-   }
    // overload of long long is necessary for cases where we need to match the size in bytes of an indexing type and a floating point data type 
    inline dtype*  __attribute__((always_inline)) operator()(long long i){ 
      return (i < len) ? (dat + i) : nullptr;

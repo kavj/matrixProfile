@@ -5,7 +5,6 @@
 #include "../utils/alloc.h"
 #include "../utils/primitive_print_funcs.h"
 #include "simd_tiled_pearson.h"
-#include "tiled_pearson.h"
 #include "pearson.h"
 constexpr long long klen  = 128; 
 
