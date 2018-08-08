@@ -1,8 +1,8 @@
-#include<immintrin.h>
 #ifdef __AVX__
 #ifndef STRIDED
 #define STRIDED
 
+#include<immintrin.h>
 namespace avx256_t{
 #ifdef __GNUC__
 #define wrapper __attribute__((always_inline,artificial))

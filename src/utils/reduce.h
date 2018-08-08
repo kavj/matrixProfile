@@ -54,6 +54,14 @@ static inline struct rpair __attribute__((always_inline)) max_reduce_8x1(const _
    return x;
 }
 
+ 
+static inline struct rpair __attribute__((always_inline)) max_pair(const struct rpair& r0, const struct rpair& r1){
+   struct rpair x;
+   x.index = blend(r0.index, r1.index, (__m256i)(r0.index < r1.index));
+   x.val = blend(r0.val, r1.val, r0.val < r1.val);
+   return x;
+}
+
 
 
 #endif
