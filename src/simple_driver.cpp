@@ -4,7 +4,7 @@
 #include "utils/descriptors.h"
 #include "utils/primitive_print_funcs.h"
 #include "solvers/pearson.h"
-#define prefalign 64
+//#define prefalign 64
 
 int main(int argc, char* argv[]){
     if(argc < 4){
@@ -36,11 +36,16 @@ int main(int argc, char* argv[]){
     fclose(f);
     clock_t t1 = clock();
     primbuf<double> mp(mlen, -1.0);
-    primbuf<int>mpi(mlen, -1);
-    pearson_pauto_reduc(ts, mp, mpi, sublen, sublen);
-    writeDoubles("mp", mp.dat, mlen);
-    writeInts("mpi", mpi.dat, mlen);
+    primbuf<long long>mpi(mlen, -1); 
+
+    //int e = pearson_pauto_tileref(ts, mp, mpi, sublen, sublen);
+    int e = pearson_pauto_reduc(ts, mp, mpi, sublen, sublen);
     clock_t t2 = clock();
+    if(e != errs::none){
+       printf("miscellaneous error (this is a debugging file anyway)\n");
+    }
+    writeDoubles("/home/kkamg001/matlabscripts/cppoutput/mp", mp(0), mlen);
+    writeLongs("/home/kkamg001/matlabscripts/cppoutput/mpi", mpi(0), mlen);
     printf("time: %lf\n", static_cast<double>((t2 - t1))/CLOCKS_PER_SEC);
     return 0;
 }

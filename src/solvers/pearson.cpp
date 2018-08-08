@@ -222,7 +222,7 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
       return errs::bad_input;  // Todo: Build a real set of error checking functions 
    }
    const long long mlen = ts.len - sublen + 1;
-   const long long tlen = std::max(static_cast<long long>(2 << 14), 4 * sublen - (4 * sublen) % klen);        
+   const long long tlen = std::max(static_cast<long long>(2 << 18), 4 * sublen - (4 * sublen) % klen);        
    const long long tilesperdim = (mlen - minlag)/tlen + ((mlen - minlag) % tlen ? 1 : 0);
    dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
    dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim, sublen);
@@ -245,8 +245,8 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
          for(long long d = diag; d < dlim; d += klen){
             if(diag + klen <= dlim){
                const long long ral = std::max(static_cast<long long>(0), std::min(tlen, mlen - d - ofst - klen)); // stupid compiler
-               pauto_pearson_kern(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral);
-               //pauto_pearson_AVX_kern(cov(ofst), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral);
+               //pauto_pearson_kern(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral);
+               pauto_pearson_AVX_kern(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral);
                //pauto_pearson_simple(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral); 
                if(ral < tlen){
                   pauto_pearson_edge(cov(ofst + d - diag), mp(0), mpi(0), df(0), dg(0), invn(0), ofst + ral, d, d + klen, mlen, false);
