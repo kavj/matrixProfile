@@ -1,12 +1,13 @@
-#include <cstdio>
-#include <algorithm>
+#include <iostream>
 #include "../utils/xprec.h"
 #include "../utils/cov.h"
 #include "../utils/alloc.h"
-#include "../utils/primitive_print_funcs.h"
+#include <omp.h>
+#include <array>
+//#include "simd_intrin.h"
 #include "simd_tiled_pearson.h"
 #include "pearson.h"
-constexpr long long klen  = 128; 
+constexpr long long klen  = 512; 
 
 static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ df, double* __restrict__ dg, long long len, long long sublen){
    df[0] = 0;
@@ -17,8 +18,7 @@ static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ 
    }
 }
 
-
-void pauto_pearson_kern(
+static inline void pauto_pearson_kern(
    double*       __restrict__  cov,
    double*       __restrict__  mp,
    long long*    __restrict__ mpi,
@@ -36,25 +36,32 @@ void pauto_pearson_kern(
    invn = (const double*)__builtin_assume_aligned(invn, prefalign);
    cov  = (double*)__builtin_assume_aligned(cov, prefalign);
    for(long long r = 0; r < iters; r++){
-      double cr[128];
+      std::array<double, klen> cr;
       if(r != 0){
-         for(long long d = 0; d < 128; d++){ 
+         for(long long d = 0; d < klen; d++){ 
             cov[d] += df[r] * dg[r + d + ofc];
             cov[d] += df[r + d + ofc] * dg[r];
          }
       }
-      for(long long d = 0; d < 128; d++){
+      for(long long d = 0; d < klen; d++){
          cr[d] = cov[d] * invn[r] * invn[r + d + ofc];
          if(cov[d] * invn[r] * invn[r + d + ofc] > mp[r + d + ofc]){
             mp[r + d + ofc] = cov[d] * invn[r] * invn[r + d + ofc];
             mpi[r + d + ofc] = r + ofr;
          }
       }
-      
-      long long ci[64];
-      for(long long i = 0; i < 64; i++){ // if we write this in the obvious way using conditional statements, gcc 7.3 is unable to generate
-                                   // a max reduction via masked writes or blend operations. I'll file a bug report at some point.
-         ci[i] = cr[i] > cr[i + 64] ? i : i + 64;
+      std::array<long long, klen/2> ci;
+      for(long long i = 0; i < 256; i++){
+         ci[i] = cr[i] > cr[i + 256] ? i : i + 256;
+         cr[i] = cr[i] > cr[i + 256] ? cr[i] : cr[i + 256];
+      }
+      for(long long i = 0; i < 128; i++){
+         ci[i] = cr[i] > cr[i + 128] ? ci[i] : ci[i + 128];
+         cr[i] = cr[i] > cr[i + 128] ? cr[i] : cr[i + 128];
+      }
+      for(long long i = 0; i < 64; i++){ // gcc can generally simplify conditional writes using if statements to masked writes, but in this case
+                                         // it generates all scalar code. For now I rewrote it using ternary operators. I'll file a bug report later.
+         ci[i] = cr[i] > cr[i + 64] ? ci[i] : ci[i + 64];
          cr[i] = cr[i] > cr[i + 64] ? cr[i] : cr[i + 64];
       }
       for(long long i = 0; i < 32; i++){
@@ -121,7 +128,7 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
       return errs::bad_input;  // Todo: Build a real set of error checking functions 
    }
    const long long mlen = ts.len - sublen + 1;
-   const long long tlen = std::max(static_cast<long long>(2 << 18), 4 * sublen - (4 * sublen) % klen);        
+   const long long tlen = std::max(static_cast<long long>(2 << 14), 4 * sublen - (4 * sublen) % klen);        
    const long long tilesperdim = (mlen - minlag)/tlen + ((mlen - minlag) % tlen ? 1 : 0);
    dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
    dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim, sublen);
@@ -131,9 +138,10 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
    xmean_windowed(ts(0), mu(0), ts.len, sublen);
    xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
    dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
- 
+   std::cout << mlen << std::endl; 
    #pragma omp parallel for
-   for(long long i = 0; i < mlen; i+= tlen){
+   for(long long i = 0; i < mlen - minlag; i+= tlen){
+      std::cout << i << std::endl;
       center_query(ts(i), mu(i), q(i/tlen), sublen); 
    }
    for(long long diag = minlag; diag < mlen; diag += tlen){
@@ -144,9 +152,7 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
          for(long long d = diag; d < dlim; d += klen){
             if(diag + klen <= dlim){
                const long long ral = std::max(static_cast<long long>(0), std::min(tlen, mlen - d - ofst - klen)); // stupid compiler
-               //pauto_pearson_kern(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral);
-               pauto_pearson_AVX_kern(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral);
-               //pauto_pearson_simple(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral); 
+               pauto_pearson_kern(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral);
                if(ral < tlen){
                   pauto_pearson_edge(cov(ofst + d - diag), mp(0), mpi(0), df(0), dg(0), invn(0), ofst + ral, d, d + klen, mlen, false);
                }
