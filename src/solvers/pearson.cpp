@@ -142,7 +142,7 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
          const long long dlim = std::min(diag + tlen, mlen - ofst);
          batchcov(ts(diag + ofst), mu(diag + ofst), q(ofst/tlen), cov(ofst), dlim - diag, sublen);
          for(long long d = diag; d < dlim; d += klen){
-            if(diag + klen <= dlim){
+            if(d + klen <= dlim){
                const long long ral = std::max(static_cast<long long>(0), std::min(tlen, mlen - d - ofst - klen)); // stupid compiler
                pauto_pearson_kern(cov(ofst + d - diag), mp(ofst), mpi(ofst), df(ofst), dg(ofst), invn(ofst), ofst, d, ral);
                if(ral < tlen){
