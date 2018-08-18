@@ -4,10 +4,8 @@
 #include "../utils/alloc.h"
 #include <omp.h>
 #include <array>
-//#include "simd_intrin.h"
-#include "simd_tiled_pearson.h"
 #include "pearson.h"
-constexpr long long klen  = 512; 
+constexpr long long klen  = 256; 
 
 static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ df, double* __restrict__ dg, long long len, long long sublen){
    df[0] = 0;
@@ -51,12 +49,8 @@ static inline void pauto_pearson_kern(
          }
       }
       std::array<long long, klen/2> ci;
-      for(long long i = 0; i < 256; i++){
-         ci[i] = cr[i] > cr[i + 256] ? i : i + 256;
-         cr[i] = cr[i] > cr[i + 256] ? cr[i] : cr[i + 256];
-      }
       for(long long i = 0; i < 128; i++){
-         ci[i] = cr[i] > cr[i + 128] ? ci[i] : ci[i + 128];
+         ci[i] = cr[i] > cr[i + 128] ? i : i + 128;
          cr[i] = cr[i] > cr[i + 128] ? cr[i] : cr[i + 128];
       }
       for(long long i = 0; i < 64; i++){ // gcc can generally simplify conditional writes using if statements to masked writes, but in this case
@@ -138,14 +132,12 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
    xmean_windowed(ts(0), mu(0), ts.len, sublen);
    xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
    dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
-   std::cout << mlen << std::endl; 
    #pragma omp parallel for
    for(long long i = 0; i < mlen - minlag; i+= tlen){
-      std::cout << i << std::endl;
       center_query(ts(i), mu(i), q(i/tlen), sublen); 
    }
    for(long long diag = minlag; diag < mlen; diag += tlen){
-      #pragma omp parallel for
+      #pragma omp parallel for schedule(guided)
       for(long long ofst = 0; ofst < mlen - diag; ofst += tlen){
          const long long dlim = std::min(diag + tlen, mlen - ofst);
          batchcov(ts(diag + ofst), mu(diag + ofst), q(ofst/tlen), cov(ofst), dlim - diag, sublen);
