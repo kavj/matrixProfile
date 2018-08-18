@@ -1,8 +1,7 @@
 #include "../arch/avx256.h"
 #define prefalign 64 
-// Todo: Split reference and simd types
-#define wid 32 
-#define unroll 8
+// Todo: Test whether simplified indexing would break compiler optimizations
+#define wid 64 
 
 void center_query(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ q, int sublen){
    q = (double*)__builtin_assume_aligned(q,prefalign);
@@ -20,7 +19,7 @@ void center_query(const double* __restrict__ ts, const double* __restrict__ mu, 
 void batchcov(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ query, double* __restrict__ cov, int count, int sublen){
    query = (double*)__builtin_assume_aligned(query,prefalign);
    cov = (double*)__builtin_assume_aligned(cov,prefalign);
-   const int alcount = count <= unroll ? count : count - count % unroll;
+   const int alcount = count <= wid ? count : count - count % wid;
    for(int i = 0; i < alcount; i+= wid){
       for(int j = 0; j < wid; j++){
          cov[i + j] = 0;
@@ -40,4 +39,3 @@ void batchcov(const double* __restrict__ ts, const double* __restrict__ mu, cons
       }
    }
 }
-
