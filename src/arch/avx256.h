@@ -11,12 +11,12 @@ namespace avx256_t{
 #endif
 
 
-static inline int wrapper testnz(__m256i a){
-  _mm256_testnzc_si256(a,a);
+static inline int wrapper testz(__m256i a){
+  _mm256_testz_si256(a,a);
 }
 
-static inline int wrapper testnz(__m256d a){
-   _mm256_testnzc_pd(a,a);
+static inline int wrapper testz(__m256d a){
+   _mm256_testz_pd(a,a);
 }
 
 static inline void wrapper maskstore(__m256d a, __m256i msk, double* b){
@@ -102,7 +102,7 @@ static inline __m256i wrapper aload(const int* a, int offset){
    return  _mm256_load_si256((__m256i*)(a+offset));
 }
 
-static inline __m256i wrapper uload(const long* a, int offset){
+static inline __m256i wrapper uload(const long long* a, int offset){
    return _mm256_loadu_si256((__m256i const*)(a+offset));
 }
 
@@ -110,7 +110,7 @@ static inline __m256i wrapper uload(const int* a, int offset){
    return _mm256_loadu_si256((__m256i const*)(a+offset));
 }
 
-static inline void wrapper astore(const __m256i &oper, long* a, int offset){
+static inline void wrapper astore(const __m256i &oper, long long* a, int offset){
    _mm256_store_si256((__m256i*)(a+offset),oper);
 }
 
@@ -118,7 +118,7 @@ static inline void wrapper astore(const __m256i &oper, int* a, int offset){
    _mm256_store_si256((__m256i*)(a+offset),oper);
 }
 
-static inline void wrapper ustore(const __m256i &oper, long* a,int offset){
+static inline void wrapper ustore(const __m256i &oper, long long* a,int offset){
    _mm256_storeu_si256((__m256i*)(a+offset),oper);
 }
 
@@ -130,7 +130,7 @@ static inline __m256d wrapper brdcst(const double* a,int offset){
    return _mm256_broadcast_sd(a+offset);
 }
 
-static inline __m256i wrapper brdcst(const long a){
+static inline __m256i wrapper brdcst(const long long a){
    return _mm256_set1_epi64x(a);
 }
 
@@ -142,7 +142,7 @@ static inline __m256d wrapper brdcst(const double a){
    return _mm256_set1_pd(a);
 }
 
-static inline __m256i wrapper set(const long i,const long j,const long k,const long l){
+static inline __m256i wrapper set(const long long i,const long long j,const long long k,const long long l){
    return _mm256_set_epi64x(l,k,j,i);
 }
 

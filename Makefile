@@ -1,14 +1,14 @@
 
 
-#CC = gcc
-CC = ~/gcc-versions/7.3.0/bin/g++
+CC = gcc
+#CC = ~/gcc-versions/7.3.0/bin/g++
 
 
-CFLAGS =  -O3 -march=native -std=c++11 -funroll-loops    
+CFLAGS =  -O3 -march=native -funroll-loops -std=c++11  
 
 LFLAGS =  -lm  
 
-ASMFLAGS = -S  -masm=intel -fno-asynchronous-unwind-tables -fno-exceptions -fno-rtti -fverbose-asm
+ASMFLAGS = -S   -masm=intel -fno-asynchronous-unwind-tables -fno-exceptions -fno-rtti -fverbose-asm
 
 SRC = src/simple_driver.cpp  src/solvers/pearson.cpp  src/utils/alloc.cpp src/utils/primitive_print_funcs.cpp  
 
@@ -23,7 +23,7 @@ debug:
 	$(CC) $(SRC)  -g -fno-asynchronous-unwind-tables -fno-exceptions -fno-rtti
 
 vdebug:
-	$(CC) $(SRC)  -mavx2 -mfma  -g -fno-asynchronous-unwind-tables -fno-exceptions -fno-rtti
+	$(CC) $(SRC)  -g -O2 -mavx2 -mfma -fno-asynchronous-unwind-tables -fno-exceptions -fno-rtti
  
 
 ompbuild: 
