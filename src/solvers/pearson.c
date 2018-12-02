@@ -1,3 +1,4 @@
+#include<stdio.h>
 #include<stdbool.h>
 #include "../utils/xprec.h"
 #include "../utils/cov.h"
@@ -6,7 +7,8 @@
 #include "pearson.h"
 const long long klen  = 256; 
 
-// Note: The use of long long here allows better compiler generated simd vectorization on architectures where sizeof(double) == sizeof(long long).
+// Note: long long instead of int here allows better compiler generated auto-vectorization on architectures where sizeof(double) == sizeof(long long).
+
 
 static void dfdg_init(const double* restrict ts, const double* restrict mu, double* restrict df, double* restrict dg, long long len, long long sublen){
    df[0] = 0;
@@ -121,11 +123,11 @@ static inline void pauto_pearson_edge(
 
 mprofile pearson_pauto_reduc(const double* ts, long long len, long long minlag, long long sublen){
    if(ts == NULL){ 
-      //printf("invalid arguments\n");
+      printf_s("invalid arguments\n");
       exit(1);
    }
    else if(sublen + minlag >= len){
-      //printf("time series is too short relative to chosen subsequence length and minimum acyclic lag factor\n");
+      printf_s("time series is too short relative to chosen subsequence length and minimum acyclic lag factor\n");
       exit(1);
    }
    const long long mlen = len - sublen + 1;
@@ -142,7 +144,7 @@ mprofile pearson_pauto_reduc(const double* ts, long long len, long long minlag, 
    double* q = alloc_buff(tilesperdim * qstride);
    // update with a more sensible return
    if((mu == NULL) || (invn == NULL) || (df == NULL) || (dg == NULL) || (cov == NULL) || (mp == NULL) || (mpi == NULL) || (q == NULL)){
-      //printf("unable to allocate memory\n");
+      printf_s("unable to allocate memory\n");
       exit(1);
    }
 
@@ -182,7 +184,7 @@ mprofile pearson_pauto_reduc(const double* ts, long long len, long long minlag, 
    dealloc_buff(dg);
    dealloc_buff(cov);
    dealloc_buff(q);
-   mprofile p = {mp, mpi};
+   mprofile p = {mp, mpi, mlen};
    return p;
 }
 

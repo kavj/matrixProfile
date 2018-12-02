@@ -1,3 +1,4 @@
+#include<stdio.h>
 #include<errno.h>
 #include "alloc.h"
 
@@ -12,6 +13,7 @@ int paddedlen(int buflen){
 void* alloc_buff(int buflen){
    void* buf = _aligned_malloc(buflen, prefalignmt);
    if(buf == NULL){
+      fprintf(stderr,"problem allocating memory\n");	   
       exit(1);
    }
    return buf;
