@@ -1,13 +1,14 @@
-#include <iostream>
+#include<stdbool.h>
 #include "../utils/xprec.h"
 #include "../utils/cov.h"
 #include "../utils/alloc.h"
 #include <omp.h>
-#include <array>
 #include "pearson.h"
-constexpr long long klen  = 256; 
+const long long klen  = 256; 
 
-static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ df, double* __restrict__ dg, long long len, long long sublen){
+// Note: The use of long long here allows better compiler generated simd vectorization on architectures where sizeof(double) == sizeof(long long).
+
+static void dfdg_init(const double* restrict ts, const double* restrict mu, double* restrict df, double* restrict dg, long long len, long long sublen){
    df[0] = 0;
    dg[0] = 0;
    for(int i = 0; i < len - sublen; i++){
@@ -17,12 +18,12 @@ static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ 
 }
 
 static inline void pauto_pearson_kern(
-   double*       __restrict__  cov,
-   double*       __restrict__  mp,
-   long long*    __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
+   double*       restrict  cov,
+   double*       restrict  mp,
+   long long*    restrict mpi,
+   const double* restrict df,
+   const double* restrict dg,
+   const double* restrict invn,
    const long long ofr,
    const long long ofc,
    const long long iters)
@@ -34,7 +35,7 @@ static inline void pauto_pearson_kern(
    invn = (const double*)__builtin_assume_aligned(invn, prefalign);
    cov  = (double*)__builtin_assume_aligned(cov, prefalign);
    for(long long r = 0; r < iters; r++){
-      std::array<double, klen> cr;
+      double cr[klen];
       if(r != 0){
          for(long long d = 0; d < klen; d++){ 
             cov[d] += df[r] * dg[r + d + ofc];
@@ -48,7 +49,7 @@ static inline void pauto_pearson_kern(
             mpi[r + d + ofc] = r + ofr;
          }
       }
-      std::array<long long, klen/2> ci;
+      long long ci[klen/2];
       for(long long i = 0; i < 128; i++){
          ci[i] = cr[i] > cr[i + 128] ? i : i + 128;
          cr[i] = cr[i] > cr[i + 128] ? cr[i] : cr[i + 128];
@@ -86,12 +87,12 @@ static inline void pauto_pearson_kern(
 }
 
 static inline void pauto_pearson_edge(
-   double*       __restrict__ cov, 
-   double*       __restrict__ mp,  
-   long long*    __restrict__ mpi, 
-   const double* __restrict__ df,  
-   const double* __restrict__ dg, 
-   const double* __restrict__ invn, 
+   double*       restrict cov, 
+   double*       restrict mp,  
+   long long*    restrict mpi, 
+   const double* restrict df,  
+   const double* restrict dg, 
+   const double* restrict invn, 
    const long long ofr, 
    const long long ofd, 
    const long long dlim,
@@ -99,7 +100,8 @@ static inline void pauto_pearson_edge(
    const bool init)
 {
    for(long long r = ofr; r < clim - ofd; r++){
-      for(long long d = ofd; d < std::min(clim - r, dlim); d++){
+      long long constraineddlim = (clim - r) < dlim ? (clim - r) : dlim; 
+      for(long long d = ofd; d < constraineddlim; d++){
          if(!init || r != ofr){
             cov[d - ofd] += df[r] * dg[r + d];
             cov[d - ofd] += df[r + d] * dg[r];
@@ -117,46 +119,70 @@ static inline void pauto_pearson_edge(
    }
 }
 
-int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long long sublen){
-   if(!(ts.valid() && mp.valid() && mpi.valid())){
-      return errs::bad_input;  // Todo: Build a real set of error checking functions 
+mprofile pearson_pauto_reduc(const double* ts, long long len, long long minlag, long long sublen){
+   if(ts == NULL){ 
+      //printf("invalid arguments\n");
+      exit(1);
    }
-   const long long mlen = ts.len - sublen + 1;
-   const long long tlen = std::max(static_cast<long long>(2 << 14), 4 * sublen - (4 * sublen) % klen);        
+   else if(sublen + minlag >= len){
+      //printf("time series is too short relative to chosen subsequence length and minimum acyclic lag factor\n");
+      exit(1);
+   }
+   const long long mlen = len - sublen + 1;
+   const long long tlen = (2 << 14) > (4 * sublen - (4 * sublen) % klen) ? (2 << 14) : (4 * sublen - (4 * sublen) % klen);
    const long long tilesperdim = (mlen - minlag)/tlen + ((mlen - minlag) % tlen ? 1 : 0);
-   dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
-   dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim, sublen);
-   if(!(mu.valid() && df.valid() && dg.valid() && invn.valid())){
-      return errs::mem_error;
+   const long long qstride = paddedlen(sublen);
+   double* mu = alloc_buff(mlen);
+   double* invn = alloc_buff(mlen);
+   double* df = alloc_buff(mlen);
+   double* dg = alloc_buff(mlen);
+   double* cov = alloc_buff(mlen);
+   double* mp = alloc_buff(mlen);
+   long long* mpi = alloc_buff(mlen);
+   double* q = alloc_buff(tilesperdim * qstride);
+   // update with a more sensible return
+   if((mu == NULL) || (invn == NULL) || (df == NULL) || (dg == NULL) || (cov == NULL) || (mp == NULL) || (mpi == NULL) || (q == NULL)){
+      //printf("unable to allocate memory\n");
+      exit(1);
    }
-   xmean_windowed(ts(0), mu(0), ts.len, sublen);
-   xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
-   dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
+
+   xmean_windowed(ts, mu, len, sublen);
+   xInvn(ts, mu, invn, len, sublen);
+   dfdg_init(ts, mu, df, dg, len, sublen);
+  
    #pragma omp parallel for
    for(long long i = 0; i < tilesperdim; i++){
-      center_query(ts(i * tlen), mu(i * tlen), q(i), sublen); 
+      center_query(&ts[i * tlen], &mu[i * tlen], &q[i * qstride], sublen); 
    }
    for(long long diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for 
       for(long long ofst = 0; ofst < tilesperdim - diag; ofst++){
          const long long di = diag * tlen + minlag;
          const long long ofi = ofst * tlen;
-         const long long dlim = std::min(di + tlen, mlen - ofi);
-         batchcov(ts(di + ofi), mu(di + ofi), q(ofst), cov(ofi), dlim - di, sublen);
+         const long long dlim = di + tlen < mlen - ofi ? (di + tlen) : (mlen - ofi); 
+         batchcov(&ts[di + ofi], &mu[di + ofi], &q[ofst * qstride], &cov[ofi], dlim - di, sublen);
          for(long long d = di; d < dlim; d += klen){
             if(d + klen <= dlim){
-               const long long ral = std::max(static_cast<long long>(0), std::min(tlen, mlen - d - ofi - klen)); // stupid compiler
-               pauto_pearson_kern(cov(ofi + d - di), mp(ofi), mpi(ofi), df(ofi), dg(ofi), invn(ofi), ofi, d, ral);
+               const long long r = tlen < (mlen - d - ofi - klen) ? tlen : (mlen - d - ofi - klen);
+	       const long long ral = r > 0 ? r : 0;
+               pauto_pearson_kern(&cov[ofi + d - di], &mp[ofi], &mpi[ofi], &df[ofi], &dg[ofi], &invn[ofi], ofi, d, ral);
                if(ral < tlen){
-                  pauto_pearson_edge(cov(ofi + d - di), mp(0), mpi(0), df(0), dg(0), invn(0), ofi + ral, d, d + klen, mlen, false);
+                  pauto_pearson_edge(&cov[ofi + d - di], mp, mpi, df, dg, invn, ofi + ral, d, d + klen, mlen, false);
                }
             }
             else{
-               pauto_pearson_edge(cov(ofi + d - di), mp(0), mpi(0), df(0), dg(0), invn(0), ofi, d, dlim, mlen, true);
+               pauto_pearson_edge(&cov[ofi + d - di], mp, mpi, df, dg, invn, ofi, d, dlim, mlen, true);
             }
          }
       }
    }
-   return errs::none;
+   dealloc_buff(mu);
+   dealloc_buff(invn);
+   dealloc_buff(df);
+   dealloc_buff(dg);
+   dealloc_buff(cov);
+   dealloc_buff(q);
+   mprofile p = {mp, mpi};
+   return p;
 }
 
