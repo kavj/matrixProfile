@@ -1,4 +1,3 @@
-#include "../arch/avx256.h"
 #define prefalign 64 
 // Todo: Test whether simplified indexing would break compiler optimizations
 #define wid 64 

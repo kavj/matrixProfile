@@ -8,11 +8,10 @@
 
 //Todo: This should be generalized 
 // Also: Marked these inline to avoid multiple inclusions due to inlining of other functions. Find a better solution for this.
- 
+
 int paddedlen(int buflen, int alignmt){
    return buflen + (buflen % alignmt ? alignmt - buflen % alignmt : 0);
 }
-
 void* init_buffer(int buflen, int alignmt){
    void* buf;
    int chk = posix_memalign((void**)&buf, alignmt, buflen);
@@ -28,3 +27,11 @@ void* init_buffer(int buflen, int alignmt){
    }
    return buf;
 }
+
+/*
+void init_buffer(int buflen, int alignmt){
+   void* buf = _aligned_malloc(buflen, alignmt);
+
+}*/
+
+

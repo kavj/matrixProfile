@@ -7,7 +7,19 @@
 #include "pearson.h"
 constexpr long long klen  = 256; 
 
+
+void pearson2zned(double* __restrict__ mp, long long len, long long sublen){
+   mp = (double*) __builtin_assume_aligned(mp, prefalign);
+   double scale = 2 * sublen;
+   #pragma omp parallel for
+   for(long long i = 0; i < len; i++){
+      mp[i] = sqrt(scale * (1.0 - mp[i]));
+   }
+}
+
 static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ df, double* __restrict__ dg, long long len, long long sublen){
+   df   = (double*)__builtin_assume_aligned(df, prefalign);
+   dg   = (double*)__builtin_assume_aligned(dg, prefalign);
    df[0] = 0;
    dg[0] = 0;
    for(int i = 0; i < len - sublen; i++){
@@ -122,7 +134,7 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
       return errs::bad_input;  // Todo: Build a real set of error checking functions 
    }
    const long long mlen = ts.len - sublen + 1;
-   const long long tlen = std::max(static_cast<long long>(2 << 14), 4 * sublen - (4 * sublen) % klen);        
+   const long long tlen = std::max(8 * klen, 4 * sublen - (4 * sublen) % klen);        
    const long long tilesperdim = (mlen - minlag)/tlen + ((mlen - minlag) % tlen ? 1 : 0);
    dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
    dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim, sublen);
@@ -139,7 +151,7 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
    for(long long diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for 
       for(long long ofst = 0; ofst < tilesperdim - diag; ofst++){
-         const long long di = diag * tlen + minlag;
+    	 const long long di = diag * tlen + minlag;
          const long long ofi = ofst * tlen;
          const long long dlim = std::min(di + tlen, mlen - ofi);
          batchcov(ts(di + ofi), mu(di + ofi), q(ofst), cov(ofi), dlim - di, sublen);

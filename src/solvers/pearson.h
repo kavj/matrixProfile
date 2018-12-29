@@ -19,11 +19,9 @@ int pearson_pauto_reduc_ref(dsbuf& ts,
                          long long sublen);
 
 
-int pearson_pauto_tileref(dsbuf& ts, 
-                          dsbuf& mp, 
-                          lsbuf& mpi, 
-                          long long minlag, 
-                          long long sublen);
+void pearson2zned(double* mp, long long len, long long sublen);
+
+int pearson_pauto_tileref(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long long sublen);
 
 namespace errs{
    const int bad_input = -1;
