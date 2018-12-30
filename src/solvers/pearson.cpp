@@ -5,10 +5,13 @@
 #include <omp.h>
 #include <array>
 #include "pearson.h"
+
+// at the moment the kernel functions rely on this being 256, since that allows auto-vectorization across most up to date compilers without writing or generating lots of intrinsics based code.
+
 constexpr long long klen  = 256; 
 
 
-void pearson2zned(double* __restrict__ mp, long long len, long long sublen){
+void pearson2zned(double* __restrict mp, long long len, long long sublen){
    mp = (double*) __builtin_assume_aligned(mp, prefalign);
    double scale = 2 * sublen;
    #pragma omp parallel for
@@ -17,7 +20,7 @@ void pearson2zned(double* __restrict__ mp, long long len, long long sublen){
    }
 }
 
-static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ df, double* __restrict__ dg, long long len, long long sublen){
+static void dfdg_init(const double* __restrict ts, const double* __restrict mu, double* __restrict df, double* __restrict dg, long long len, long long sublen){
    df   = (double*)__builtin_assume_aligned(df, prefalign);
    dg   = (double*)__builtin_assume_aligned(dg, prefalign);
    df[0] = 0;
@@ -28,13 +31,26 @@ static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ 
    }
 }
 
-static inline void pauto_pearson_kern(
-   double*       __restrict__  cov,
-   double*       __restrict__  mp,
-   long long*    __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
+
+
+static inline void nautocorr_reduc_kern(
+   double*       __restrict  cov,
+   double*       __restrict  mp,
+   long long*    __restrict mpi,
+   const double* __restrict df,
+   const double* __restrict dg,
+   const double* __restrict invn,
+   const long long ofr,
+   const long long ofc,
+   const long long iters) __attribute__((always_inline));
+
+static inline void nautocorr_reduc_kern(
+   double*       __restrict  cov,
+   double*       __restrict  mp,
+   long long*    __restrict mpi,
+   const double* __restrict df,
+   const double* __restrict dg,
+   const double* __restrict invn,
    const long long ofr,
    const long long ofc,
    const long long iters)
@@ -97,13 +113,13 @@ static inline void pauto_pearson_kern(
    }
 }
 
-static inline void pauto_pearson_edge(
-   double*       __restrict__ cov, 
-   double*       __restrict__ mp,  
-   long long*    __restrict__ mpi, 
-   const double* __restrict__ df,  
-   const double* __restrict__ dg, 
-   const double* __restrict__ invn, 
+static inline void nautocorr_reduc_edge(
+   double*       __restrict cov, 
+   double*       __restrict mp,  
+   long long*    __restrict mpi, 
+   const double* __restrict df,  
+   const double* __restrict dg, 
+   const double* __restrict invn, 
    const long long ofr, 
    const long long ofd, 
    const long long dlim,
@@ -129,7 +145,7 @@ static inline void pauto_pearson_edge(
    }
 }
 
-int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long long sublen){
+int nautocorr_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long long sublen){
    if(!(ts.valid() && mp.valid() && mpi.valid())){
       return errs::bad_input;  // Todo: Build a real set of error checking functions 
    }
@@ -158,13 +174,13 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
          for(long long d = di; d < dlim; d += klen){
             if(d + klen <= dlim){
                const long long ral = std::max(static_cast<long long>(0), std::min(tlen, mlen - d - ofi - klen)); // stupid compiler
-               pauto_pearson_kern(cov(ofi + d - di), mp(ofi), mpi(ofi), df(ofi), dg(ofi), invn(ofi), ofi, d, ral);
+               nautocorr_reduc_kern(cov(ofi + d - di), mp(ofi), mpi(ofi), df(ofi), dg(ofi), invn(ofi), ofi, d, ral);
                if(ral < tlen){
-                  pauto_pearson_edge(cov(ofi + d - di), mp(0), mpi(0), df(0), dg(0), invn(0), ofi + ral, d, d + klen, mlen, false);
+                  nautocorr_reduc_edge(cov(ofi + d - di), mp(0), mpi(0), df(0), dg(0), invn(0), ofi + ral, d, d + klen, mlen, false);
                }
             }
             else{
-               pauto_pearson_edge(cov(ofi + d - di), mp(0), mpi(0), df(0), dg(0), invn(0), ofi, d, dlim, mlen, true);
+               nautocorr_reduc_edge(cov(ofi + d - di), mp(0), mpi(0), df(0), dg(0), invn(0), ofi, d, dlim, mlen, true);
             }
          }
       }
@@ -172,3 +188,39 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
    return errs::none;
 }
 
+
+/*
+int ncrosscorr_rowwise_reduc(dsbuf &a, dsbuf &b, dsbuf &mp, dsbuf &mpi, long long sublen){
+   const long long mlen = std::min(a.len, b.len) - sublen + 1;
+   const long long tlen = std::max(8 * klen, 4 * sublen - (4 * sublen) % klen);
+   const long long tilesperdim = mlen / tlen + (mlen % tlen ? 1 : 0);
+   dsbuf mua(mlen); dsbuf invna(mlen); dsbuf dfa(mlen); dsbuf dga(mlen); 
+   dsbuf mub(mlen); dsbuf invnb(mlen); dsbuf dfb(mlen); dsbuf dgb(mlen);
+   // check valid or more likely factor out common steps?
+   //
+   dfdg_init(a(0), mua(0), dfa(0), dga(0), a.len, sublen);
+   dfdg_init(b(0), mub(0), dfb(0), dgb(0), b.len, sublen);
+
+   #pragma omp parallel for 
+   for(long long i = 0; i < tilesperdim; i++){
+      
+   }
+}
+
+
+
+int ncrosscorr_colwise_reduc(dsbuf &a, dsbuf &b, dsbuf &mp, dsbuf &mpi, long long sublen){
+   const long long mlen = a.len - sublen + 1;
+   const long long tlen = std::max(8 * klen, 4 * sublen - (4 * sublen) % klen);
+   const long long tilesperdim = mlen / tlen + (mlen % tlen ? 1 : 0);
+   dsbuf mua(mlen); dsbuf invna(mlen); dsbuf dfa(mlen); dsbuf dga(mlen); 
+   dsbuf mub(mlen); dsbuf invnb(mlen); dsbuf dfb(mlen); dsbuf dgb(mlen);
+   // check valid or more likely factor out common steps?
+   //
+   #pragma omp parallel for 
+   for(long long i = 0; i < tilesperdim; i++){
+
+   }
+}
+
+*/

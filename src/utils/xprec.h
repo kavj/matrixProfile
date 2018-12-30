@@ -23,7 +23,7 @@ static inline void xmul (dtype &a, dtype& b){
 
 
 template<typename dtype>
-void fast_invcn(dtype* __restrict__ invn, const dtype* __restrict__ ts, const dtype* __restrict__ mu, int len, int sublen){
+void fast_invcn(dtype* __restrict invn, const dtype* __restrict ts, const dtype* __restrict mu, int len, int sublen){
    dtype a = 0;
    for(int i = 0; i < sublen; i++){
       dtype t = ts[i] - mu[0];
@@ -40,7 +40,7 @@ void fast_invcn(dtype* __restrict__ invn, const dtype* __restrict__ ts, const dt
 
 
 template<typename dtype>
-dtype invcn(const dtype* __restrict__ ts, const dtype* __restrict__ sI, dtype z, int winlen){
+dtype invcn(const dtype* __restrict ts, const dtype* __restrict sI, dtype z, int winlen){
    dtype p = ts[0] - z;
    dtype s = p;
    xmul(p,s);

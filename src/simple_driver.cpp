@@ -1,6 +1,5 @@
 #include<cstdio>
 #include<ctime>
-#include<cstdlib>
 #include<omp.h>
 #include "utils/descriptors.h"
 #include "utils/primitive_print_funcs.h"
@@ -24,7 +23,7 @@ int main(int argc, char* argv[]){
     primbuf<double> ts(len);   
  
     if(!ts.valid()){
-       printf("failed to allocate memory for time series\n");
+       printf("failed to allocate memory\n");
     }
     double* t = ts(0);
     if(t == nullptr){
@@ -42,7 +41,7 @@ int main(int argc, char* argv[]){
     #endif
     primbuf<double> mp(mlen, -1.0);
     primbuf<long long>mpi(mlen, -1); 
-    int e = pearson_pauto_reduc(ts, mp, mpi, sublen, sublen);
+    int e = nautocorr_reduc(ts, mp, mpi, sublen, sublen);
     pearson2zned(mp(0), mlen, sublen);    
     #if defined(_OPENMP)
     double t2 = omp_get_wtime();

@@ -38,3 +38,71 @@ void batchcov(const double* __restrict__ ts, const double* __restrict__ mu, cons
       }
    }
 }
+
+// Will update these later, They will eventually displace xprec, which is still a bit sloppy 
+// Todo: verify that zero length windows are accounted for prior to reaching this point
+#include<array>
+
+void trailing_mean(double* __restrict a, double* __restrict mu, long long len, long long winlen){
+   double accum = a[0];
+   double resid = 0;
+   for(long long i = 1; i < winlen; i++){
+      double m = a[i];
+      double p = accum;
+      accum += m;
+      double q = accum - p;
+      resid += ((p - (accum - q)) + (m - q));
+   }
+   mu[0] = accum + resid;
+   for(long long i = winlen; i < len; i++){
+      double m = a[i - winlen];
+      double n = a[i];
+      double p = accum - m;
+      double q = p - accum;
+      double r = resid + ((accum - (p - q)) - (m + q));
+      accum = p + n;
+      double s = accum - p;
+      resid = r + ((p - (accum - s)) + (n - s));
+      mu[i - winlen + 1] = accum + resid;
+   }
+   for(long long i = 0; i < len - winlen; i++){
+      mu[i] /= winlen;
+   }
+}
+
+void trailing_inverse_centered_norm(double* __restrict a, double* __restrict mu, double* __restrict invn, long long len, long long winlen){
+   const long long alignedwinlen = winlen - winlen % 128;
+   #pragma omp parallel for
+   for(long long i = 0; i < len - winlen; i++){
+      std::array<double, 128> resid;
+      std::array<double, 64> aux;
+      for(long long j = i; j < i + alignedwinlen; j += 64){
+         for(long long k = j; k < j + 64; k++){
+            aux[k - j] = a[j] - mu[i];
+     	    //aux[k - j] *= aux[k - j];
+	 }
+	 for(long long k = j; k < j + 64; k++){
+           invn[k] = aux[k - j] * aux[k - j]; 
+	 }
+	 for(long long k = j; k < j + 128; k++){
+
+	 }
+      }
+      for(long long j = i + alignedwinlen; j < winlen; j++){
+         for(long long k = j; k < j + 64; k++){
+            aux[k - j] = a[j] - mu[i];
+     	    //aux[k - j] *= aux[k - j];
+	 }
+	 for(long long k = j; k < j + 64; k++){
+           invn[k] = aux[k - j] * aux[k - j]; 
+	 }
+	 for(long long k = j; k < j + 128; k++){
+
+	 }
+      }
+      for(long long j = i + alignedwinlen; j < winlen; j++){
+        // nosimd 
+      }
+   }
+}
+
