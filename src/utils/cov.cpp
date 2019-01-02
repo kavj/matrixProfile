@@ -1,52 +1,52 @@
-#define prefalign 64 
-// Todo: Test whether simplified indexing would break compiler optimizations
-#define wid 64 
+#include<cmath>
+#include<array>
+constexpr int prefalign  = 64;
+constexpr int blocklen = 32;
 
-void center_query(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ q, int sublen){
-   q = (double*)__builtin_assume_aligned(q,prefalign);
-   const int aligned = sublen <= wid ? sublen : sublen - sublen % wid;
-   for(int i = 0; i < aligned; i+= wid){
-      for(int j = i; j < i + wid; j++){
-         q[j] = ts[j] - mu[0];
+void center_query(const double* __restrict ts, const double* __restrict mu, double* __restrict query, int winlen){
+   query = (double*)__builtin_assume_aligned(query, prefalign);
+   const int alignedlen = (winlen >= blocklen) ?  (winlen - winlen % blocklen) : 0;
+   for(int i = 0; i < alignedlen; i+= blocklen){
+      for(int j = i; j < i + blocklen; j++){
+         query[j] = ts[j] - mu[0];
       }
    }
-   for(int i = aligned; i < sublen; i++){
-      q[i] = ts[i] - mu[0];
+   for(int i = alignedlen; i < winlen; i++){
+      query[i] = ts[i] - mu[0];
    }
 }
 
-void batchcov(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ query, double* __restrict__ cov, int count, int sublen){
+void batchcov(const double* __restrict ts, const double* __restrict mu, const double* __restrict query, double* __restrict cov, int count, int winlen){
    query = (double*)__builtin_assume_aligned(query,prefalign);
    cov = (double*)__builtin_assume_aligned(cov,prefalign);
-   const int alcount = count <= wid ? count : count - count % wid;
-   for(int i = 0; i < alcount; i+= wid){
-      for(int j = 0; j < wid; j++){
+   const int alignedcount = (count >= blocklen) ? (count - count % blocklen) : 0;
+   for(int i = 0; i < alignedcount; i+= blocklen){
+      for(int j = 0; j < blocklen; j++){
          cov[i + j] = 0;
       }
-      for(int k = 0; k < sublen; k++){
-         for(int j = 0; j < wid; j++){
+      for(int k = 0; k < winlen; k++){
+         for(int j = 0; j < blocklen; j++){
             cov[i + j] += (ts[i + j + k] - mu[i + j]) * query[k];
          }
       }
    }
-   for(int i = alcount; i < count; i++){
+   for(int i = alignedcount; i < count; i++){
       cov[i] = 0;
    }
-   for(int i = 0; i < sublen; i++){
-      for(int j = alcount; j < count; j++){
+   for(int i = 0; i < winlen; i++){
+      for(int j = alignedcount; j < count; j++){
          cov[j] += (ts[i + j] - mu[j]) * query[i]; 
       }
    }
 }
 
-// Will update these later, They will eventually displace xprec, which is still a bit sloppy 
-// Todo: verify that zero length windows are accounted for prior to reaching this point
-#include<array>
 
-void trailing_mean(double* __restrict a, double* __restrict mu, long long len, long long winlen){
+// The following 2 functions are based on the work in Ogita et al, Accurate Sum and Dot Product
+
+void sw_mean(double* __restrict a, double* __restrict mu, int len, int winlen){
    double accum = a[0];
    double resid = 0;
-   for(long long i = 1; i < winlen; i++){
+   for(int i = 1; i < winlen; i++){
       double m = a[i];
       double p = accum;
       accum += m;
@@ -54,7 +54,7 @@ void trailing_mean(double* __restrict a, double* __restrict mu, long long len, l
       resid += ((p - (accum - q)) + (m - q));
    }
    mu[0] = accum + resid;
-   for(long long i = winlen; i < len; i++){
+   for(int i = winlen; i < len; i++){
       double m = a[i - winlen];
       double n = a[i];
       double p = accum - m;
@@ -65,44 +65,57 @@ void trailing_mean(double* __restrict a, double* __restrict mu, long long len, l
       resid = r + ((p - (accum - s)) + (n - s));
       mu[i - winlen + 1] = accum + resid;
    }
-   for(long long i = 0; i < len - winlen; i++){
+   for(int i = 0; i < len - winlen + 1; i++){
       mu[i] /= winlen;
    }
 }
 
-void trailing_inverse_centered_norm(double* __restrict a, double* __restrict mu, double* __restrict invn, long long len, long long winlen){
-   const long long alignedwinlen = winlen - winlen % 128;
+
+void sw_inv_meancentered_norm(double* __restrict a, double* __restrict mu, double* __restrict invn, int len, int winlen){
+   mu = static_cast<double*>(__builtin_assume_aligned(mu, prefalign));
+   invn = static_cast<double*>(__builtin_assume_aligned(invn, prefalign));
+   const int alignedwinlen = (winlen >= blocklen) ? (winlen - winlen % blocklen) : 0;
    #pragma omp parallel for
-   for(long long i = 0; i < len - winlen; i++){
-      std::array<double, 128> resid;
-      std::array<double, 64> aux;
-      for(long long j = i; j < i + alignedwinlen; j += 64){
-         for(long long k = j; k < j + 64; k++){
-            aux[k - j] = a[j] - mu[i];
-     	    //aux[k - j] *= aux[k - j];
+   for(int i = 0; i < len - winlen + 1; i++){
+      double accsum = 0;
+      double accresid = 0;
+      for(int j = i; j < i + alignedwinlen; j += blocklen){
+         std::array<double, blocklen> sq;
+	 std::array<double, blocklen> aux;
+         for(int k = 0; k < blocklen; k++){
+            aux[k] = a[j + k] - mu[i];
 	 }
-	 for(long long k = j; k < j + 64; k++){
-           invn[k] = aux[k - j] * aux[k - j]; 
+	 for(int k = 0; k < blocklen; k++){
+            sq[k] = aux[k] * aux[k];
 	 }
-	 for(long long k = j; k < j + 128; k++){
-
+	 for(int k = 0; k < blocklen; k++){
+            aux[k] = fma(aux[k], aux[k], -sq[k]);
 	 }
-      }
-      for(long long j = i + alignedwinlen; j < winlen; j++){
-         for(long long k = j; k < j + 64; k++){
-            aux[k - j] = a[j] - mu[i];
-     	    //aux[k - j] *= aux[k - j];
-	 }
-	 for(long long k = j; k < j + 64; k++){
-           invn[k] = aux[k - j] * aux[k - j]; 
-	 }
-	 for(long long k = j; k < j + 128; k++){
-
+	 for(int k = 0; k <  blocklen; k++){
+     	    double term  = sq[k]; 
+	    double priorsum = accsum;
+            accsum += term;
+            double r = accsum - priorsum;
+	    double resid = (priorsum - (accsum - r) + (term - r));
+	    accresid += (aux[k] + resid);
 	 }
       }
-      for(long long j = i + alignedwinlen; j < winlen; j++){
-        // nosimd 
+      for(int j = i + alignedwinlen; j < i + winlen; j++){
+         double mc = a[j] - mu[i];
+	 double term = mc * mc;
+	 double residsq = fma(mc, mc, -term);
+         double priorsum = accsum;  
+         accsum += term;
+	 double r = accsum - priorsum;
+	 double residadd = (priorsum - (accsum - r) + (term - r));
+	 accresid += (residsq + residadd);
       }
+      invn[i] = accsum + accresid;
+   }
+   // debating whether to split this section
+   #pragma omp parallel for
+   for(int i = 0; i < len - winlen + 1; i++){
+      invn[i] = 1/sqrt(invn[i]);
    }
 }
 

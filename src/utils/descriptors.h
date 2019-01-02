@@ -10,8 +10,8 @@ template<typename dtype> struct multibuf{
    int stride;
 
    multibuf(int count, int blocklen) : bcount(count) {
-      stride = paddedlen(blocklen, prefalign);
-      dat = reinterpret_cast<dtype*>(alloc_aligned_buffer(stride * count * sizeof(dtype), prefalign));
+      stride = paddedlen(blocklen);
+      dat = reinterpret_cast<dtype*>(alloc_aligned_buffer(stride * count * sizeof(dtype)));
    }
    
    inline __attribute__((always_inline)) ~multibuf(){
@@ -36,14 +36,14 @@ template<typename dtype> struct primbuf{
    int len;
 
    primbuf(int buflen, int fillval) : len(buflen) {
-      dat = (buflen > 0) ? reinterpret_cast<dtype*>(alloc_aligned_buffer(paddedlen(buflen, prefalign) * sizeof(dtype), prefalign)) : nullptr;
+      dat = (buflen > 0) ? reinterpret_cast<dtype*>(alloc_aligned_buffer(buflen * sizeof(dtype))) : nullptr;
       if(dat != nullptr){
          std::fill(dat, dat + len, fillval); 
       }
    }
 
    primbuf(int buflen) : len(buflen) {
-      dat = (buflen > 0) ? reinterpret_cast<dtype*>(alloc_aligned_buffer(paddedlen(buflen, prefalign) * sizeof(dtype), prefalign)) : nullptr;
+      dat = (buflen > 0) ? reinterpret_cast<dtype*>(alloc_aligned_buffer(buflen * sizeof(dtype))) : nullptr;
    }
    
    inline __attribute__((always_inline)) ~primbuf(){

@@ -1,37 +1,18 @@
-
-
-
-#define _POSIX_C_SOURCE 200809L
+#include "alloc.h"
 #include<cstdlib>
-#include<cstdio>
-#include<cerrno>
+#include<iostream>
 
-//Todo: This should be generalized 
-// Also: Marked these inline to avoid multiple inclusions due to inlining of other functions. Find a better solution for this.
+const int prefalign = 64;
 
-int paddedlen(int buflen, int alignmt){
-   return buflen + (buflen % alignmt ? alignmt - buflen % alignmt : 0);
+int paddedlen(int buflen){
+   return buflen + (buflen % prefalign ? prefalign - buflen % prefalign : 0);
 }
-void* init_buffer(int buflen, int alignmt){
-   void* buf;
-   int chk = posix_memalign((void**)&buf, alignmt, buflen);
-   if(chk != 0){
-      if((chk == EINVAL) || (chk == ENOMEM)){
-         perror("posix_memalign");
-         exit(1);
-      }
-      else{
-         printf("unknown error\n");
-         exit(1);
-      }
+
+void* alloc_aligned_buffer(int buflen){
+   void* buf = aligned_alloc(prefalign, buflen);
+   if(buf == nullptr){
+      std::cerr << "unable to allocate memory" << std::endl;
+      exit(1);
    }
    return buf;
 }
-
-/*
-void init_buffer(int buflen, int alignmt){
-   void* buf = _aligned_malloc(buflen, alignmt);
-
-}*/
-
-

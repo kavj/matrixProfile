@@ -1,9 +1,13 @@
-#include "../arch/avx256.h"
+#ifndef prefalign
 #define prefalign 64 
+#endif
 // Todo: Split reference and simd types
-#define wid 32
-#define unroll 8
 
-void center_query(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ q, int sublen);
+void center_query(const double* __restrict ts, const double* __restrict mu, double* __restrict q, int sublen);
 
-void batchcov(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ query, double* __restrict__ cov, int count, int sublen);
+void batchcov(const double* __restrict ts, const double* __restrict mu, const double* __restrict query, double* __restrict cov, int count, int sublen);
+
+void sw_mean(double* __restrict a, double* __restrict mu, int len, int winlen);
+
+void sw_inv_meancentered_norm(double* __restrict a, double* __restrict mu, double* __restrict invn, int len, int winlen);
+ 

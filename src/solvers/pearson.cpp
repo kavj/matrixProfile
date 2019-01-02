@@ -31,19 +31,6 @@ static void dfdg_init(const double* __restrict ts, const double* __restrict mu, 
    }
 }
 
-
-
-static inline void nautocorr_reduc_kern(
-   double*       __restrict  cov,
-   double*       __restrict  mp,
-   long long*    __restrict mpi,
-   const double* __restrict df,
-   const double* __restrict dg,
-   const double* __restrict invn,
-   const long long ofr,
-   const long long ofc,
-   const long long iters) __attribute__((always_inline));
-
 static inline void nautocorr_reduc_kern(
    double*       __restrict  cov,
    double*       __restrict  mp,
@@ -157,8 +144,10 @@ int nautocorr_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long lon
    if(!(mu.valid() && df.valid() && dg.valid() && invn.valid())){
       return errs::mem_error;
    }
-   xmean_windowed(ts(0), mu(0), ts.len, sublen);
-   xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
+   
+   sw_mean(ts(0), mu(0), ts.len, sublen);
+   sw_inv_meancentered_norm(ts(0), mu(0), invn(0), ts.len, sublen);
+   //xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
    dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
    #pragma omp parallel for
    for(long long i = 0; i < tilesperdim; i++){
