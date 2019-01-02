@@ -2,7 +2,7 @@
 #include<cstdlib>
 #include<iostream>
 
-const int prefalign = 64;
+//const int prefalign = 64;
 
 int paddedlen(int buflen){
    return buflen + (buflen % prefalign ? prefalign - buflen % prefalign : 0);
@@ -15,4 +15,8 @@ void* alloc_aligned_buffer(int buflen){
       exit(1);
    }
    return buf;
+}
+
+void dealloc_aligned_buffer(void* buf){
+   free(buf);
 }

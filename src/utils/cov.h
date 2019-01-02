@@ -1,6 +1,3 @@
-#ifndef prefalign
-#define prefalign 64 
-#endif
 // Todo: Split reference and simd types
 
 void center_query(const double* __restrict ts, const double* __restrict mu, double* __restrict q, int sublen);

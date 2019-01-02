@@ -1,12 +1,9 @@
 #include "../utils/descriptors.h"
 
-typedef primbuf<double> dsbuf;
-typedef primbuf<long long> lsbuf;  
-typedef multibuf<double> mdsbuf; 
-typedef multibuf<long long> mdsibuf;
-typedef double dtype;
+typedef strided_buffer<double> dbuf; 
+typedef strided_buffer<long long> ibuf;
 
-int nautocorr_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long long sublen);
+int nautocorr_reduc(dbuf& ts, dbuf& mp, ibuf& mpi, long long minlag, long long sublen);
 
 void pearson2zned(double* mp, long long len, long long sublen);
 

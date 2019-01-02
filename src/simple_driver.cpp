@@ -20,18 +20,13 @@ int main(int argc, char* argv[]){
         exit(1);
     }
     int mlen = len - sublen + 1;
-    primbuf<double> ts(len);   
+    dbuf ts(len, 1);   
  
     if(!ts.valid()){
        printf("failed to allocate memory\n");
     }
-    double* t = ts(0);
-    if(t == nullptr){
-       printf("null pointer returned\n");
-       exit(1);
-    }  
     for(int i = 0; i < len; i++){
-       fscanf(f, "%lf\n", t + i);
+       fscanf(f, "%lf\n", ts(i));
     }
     fclose(f);
     #if defined(_OPENMP)
@@ -39,8 +34,8 @@ int main(int argc, char* argv[]){
     #else
     clock_t t1 = clock();
     #endif
-    primbuf<double> mp(mlen, -1.0);
-    primbuf<long long>mpi(mlen, -1); 
+    dbuf mp(mlen, 1, -1.0);
+    ibuf mpi(mlen, 1, -1); 
     int e = nautocorr_reduc(ts, mp, mpi, sublen, sublen);
     pearson2zned(mp(0), mlen, sublen);    
     #if defined(_OPENMP)
