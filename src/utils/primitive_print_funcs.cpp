@@ -53,7 +53,7 @@ void writeLongs(const char* name,const long long* t, const int n){
         exit(1);
     }
     for(int i = 0; i < n; i++){
-        fprintf(f, "%d\n", t[i]);
+        fprintf(f, "%lld\n", t[i]);
     }
     fclose(f);
 }

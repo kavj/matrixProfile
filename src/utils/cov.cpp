@@ -3,42 +3,33 @@
 constexpr int prefalign  = 64;
 constexpr int blocklen = 32;
 
+
 void center_query(const double* __restrict ts, const double* __restrict mu, double* __restrict query, int winlen){
    query = (double*)__builtin_assume_aligned(query, prefalign);
-   const int alignedlen = (winlen >= blocklen) ?  (winlen - winlen % blocklen) : 0;
-   for(int i = 0; i < alignedlen; i+= blocklen){
-      for(int j = i; j < i + blocklen; j++){
-         query[j] = ts[j] - mu[0];
-      }
-   }
-   for(int i = alignedlen; i < winlen; i++){
+   mu = (double*) __builtin_assume_aligned(mu, prefalign);
+   #pragma omp simd aligned(query, mu : prefalign) safelen(128)  
+   for(int i = 0; i < winlen; i++){
       query[i] = ts[i] - mu[0];
    }
 }
 
+
+#pragma omp declare simd aligned(ts, mu, query, cov : prefalign) 
 void batchcov(const double* __restrict ts, const double* __restrict mu, const double* __restrict query, double* __restrict cov, int count, int winlen){
+   ts = (double*) __builtin_assume_aligned(ts,prefalign);
+   mu = (double*) __builtin_assume_aligned(mu,prefalign);
    query = (double*)__builtin_assume_aligned(query,prefalign);
    cov = (double*)__builtin_assume_aligned(cov,prefalign);
-   const int alignedcount = (count >= blocklen) ? (count - count % blocklen) : 0;
-   for(int i = 0; i < alignedcount; i+= blocklen){
-      for(int j = 0; j < blocklen; j++){
-         cov[i + j] = 0;
-      }
-      for(int k = 0; k < winlen; k++){
-         for(int j = 0; j < blocklen; j++){
-            cov[i + j] += (ts[i + j + k] - mu[i + j]) * query[k];
-         }
-      }
-   }
-   for(int i = alignedcount; i < count; i++){
+   for(int i = 0; i < count; i++){
       cov[i] = 0;
-   }
-   for(int i = 0; i < winlen; i++){
-      for(int j = alignedcount; j < count; j++){
-         cov[j] += (ts[i + j] - mu[j]) * query[i]; 
+      #pragma omp simd aligned(ts, mu, query, cov : prefalign) safelen(128)
+      for(int j = 0; j < winlen; j++){
+         cov[i + j] += (ts[i + j] - mu[i]) * query[j];
       }
    }
 }
+
+
 
 
 // The following 2 functions are based on the work in Ogita et al, Accurate Sum and Dot Product

@@ -2,8 +2,6 @@
 #include<cstdlib>
 #include<iostream>
 
-//const int prefalign = 64;
-
 int paddedlen(int buflen){
    return buflen + (buflen % prefalign ? prefalign - buflen % prefalign : 0);
 }

@@ -1,5 +1,5 @@
-#ifndef DUMB_PRINT
-#define DUMB_PRINT
+#ifndef __PRIM_PRINT__
+#define __PRIM_PRINT__
 void writeDoubles(const char* name, const double* t, const int n);
 void appendDoubles(const char* name, const double* t, const int n);
 void writeInts(const char* name, const int* t, int n);

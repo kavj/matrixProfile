@@ -1,4 +1,5 @@
-// Todo: Split reference and simd types
+#ifndef __COV__
+#define __COV__
 
 void center_query(const double* __restrict ts, const double* __restrict mu, double* __restrict q, int sublen);
 
@@ -7,4 +8,5 @@ void batchcov(const double* __restrict ts, const double* __restrict mu, const do
 void sw_mean(double* __restrict a, double* __restrict mu, int len, int winlen);
 
 void sw_inv_meancentered_norm(double* __restrict a, double* __restrict mu, double* __restrict invn, int len, int winlen);
- 
+
+#endif

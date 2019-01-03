@@ -1,10 +1,10 @@
-#include<cstdio>
+#include<iostream>
+#include<algorithm>
 #include<ctime>
 #include<omp.h>
-#include "utils/descriptors.h"
+#include "utils/alloc.h"
 #include "utils/primitive_print_funcs.h"
 #include "solvers/pearson.h"
-//#define prefalign 64
 
 int main(int argc, char* argv[]){
     if(argc < 4){
@@ -20,13 +20,14 @@ int main(int argc, char* argv[]){
         exit(1);
     }
     int mlen = len - sublen + 1;
-    dbuf ts(len, 1);   
- 
-    if(!ts.valid()){
-       printf("failed to allocate memory\n");
+    double* ts = static_cast<double*>(alloc_aligned_buffer(len * sizeof(double)));
+
+    if(ts == nullptr){
+       std::cerr << "failed to allocate memory" << std::endl;
+       exit(1);
     }
     for(int i = 0; i < len; i++){
-       fscanf(f, "%lf\n", ts(i));
+       int throwaway = fscanf(f, "%lf\n", &ts[i]);
     }
     fclose(f);
     #if defined(_OPENMP)
@@ -34,21 +35,23 @@ int main(int argc, char* argv[]){
     #else
     clock_t t1 = clock();
     #endif
-    dbuf mp(mlen, 1, -1.0);
-    ibuf mpi(mlen, 1, -1); 
+    double* mp = static_cast<double*>(alloc_aligned_buffer(mlen * sizeof(double)));
+    long long* mpi = static_cast<long long*>(alloc_aligned_buffer(mlen * sizeof(long long)));
+    std::fill(mp, mp + mlen, -1.0);
+    std::fill(mpi, mpi + mlen, -1); 
     int e = nautocorr_reduc(ts, mp, mpi, sublen, sublen);
-    pearson2zned(mp(0), mlen, sublen);    
+    pearson2zned(mp, mlen, sublen);    
     #if defined(_OPENMP)
     double t2 = omp_get_wtime();
-    printf("time: %lf\n", t2 - t1);
+    std::cout << "time: " << t2 - t1 << std::endl;
     #else
     clock_t t2 = clock();
-    printf("time: %lf\n", static_cast<double>((t2 - t1))/CLOCKS_PER_SEC);
+    std::cout << "time: " << static_cast<double>(t2 - t1)/CLOCKS_PER_SEC << std::endl;
     #endif
     if(e != errs::none){
        printf("miscellaneous error (this is a debugging file anyway)\n");
     }
-    writeDoubles("cppoutput/mp", mp(0), mlen);
-    writeLongs("cppoutput/mpi", mpi(0), mlen);
+    writeDoubles("cppoutput/mp", mp, mlen);
+    writeLongs("cppoutput/mpi", mpi, mlen);
     return 0;
 }

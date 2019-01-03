@@ -1,9 +1,7 @@
-#include "../utils/descriptors.h"
 
-typedef strided_buffer<double> dbuf; 
-typedef strided_buffer<long long> ibuf;
 
-int nautocorr_reduc(dbuf& ts, dbuf& mp, ibuf& mpi, long long minlag, long long sublen);
+
+int nautocorr_reduc(double* ts, double*  mp, long long* mpi, long long minlag, long long sublen);
 
 void pearson2zned(double* mp, long long len, long long sublen);
 
