@@ -2,9 +2,9 @@
 #include<algorithm>
 #include<ctime>
 #include<omp.h>
-#include "utils/alloc.h"
-#include "utils/primitive_print_funcs.h"
-#include "solvers/pearson.h"
+#include "alloc.h"
+#include "primitive_print_funcs.h"
+#include "pearson.h"
 
 int main(int argc, char* argv[]){
     if(argc < 4){
