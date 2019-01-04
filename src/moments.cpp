@@ -3,7 +3,7 @@
 #include "moments.h"
 constexpr int prefalign  = 64;
 constexpr int blocklen = 32;
-
+constexpr int wid = 128; // optimize out later
 
 void center_query(const double* __restrict ts, const double* __restrict mu, double* __restrict query, int winlen){
    query = (double*)__builtin_assume_aligned(query, prefalign);
@@ -14,23 +14,30 @@ void center_query(const double* __restrict ts, const double* __restrict mu, doub
    }
 }
 
-
-#pragma omp declare simd aligned(ts, mu, query, cov : prefalign) 
-void batchcov(const double* __restrict ts, const double* __restrict mu, const double* __restrict query, double* __restrict cov, int count, int winlen){
-   ts = (double*) __builtin_assume_aligned(ts,prefalign);
-   mu = (double*) __builtin_assume_aligned(mu,prefalign);
+void batchcov(const double* __restrict ts, const double* __restrict mu, const double* __restrict query, double* __restrict cov, int count, int sublen){
    query = (double*)__builtin_assume_aligned(query,prefalign);
    cov = (double*)__builtin_assume_aligned(cov,prefalign);
-   for(int i = 0; i < count; i++){
+   const int alcount = count <= wid ? count : count - count % wid;
+   for(int i = 0; i < alcount; i+= wid){
+      // split the loops again so that is just assigns on the first round, recent compilers don't seem to have too much trouble with this split
+      for(int j = 0; j < wid; j++){
+         cov[i + j] = 0;
+      }
+      for(int k = 0; k < sublen; k++){
+         for(int j = 0; j < wid; j++){
+            cov[i + j] += (ts[i + j + k] - mu[i + j]) * query[k];
+         }
+      }
+   }
+   for(int i = alcount; i < count; i++){
       cov[i] = 0;
-      #pragma omp simd aligned(ts, mu, query, cov : prefalign) safelen(128)
-      for(int j = 0; j < winlen; j++){
-         cov[i + j] += (ts[i + j] - mu[i]) * query[j];
+   }  
+   for(int i = 0; i < sublen; i++){
+      for(int j = alcount; j < count; j++){
+         cov[j] += (ts[i + j] - mu[j]) * query[i]; 
       }
    }
 }
-
-
 
 
 // The following 2 functions are based on the work in Ogita et al, Accurate Sum and Dot Product
