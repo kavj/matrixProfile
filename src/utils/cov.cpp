@@ -1,8 +1,9 @@
+#include "../arch/avx256.h"
 #define prefalign 64 
 // Todo: Test whether simplified indexing would break compiler optimizations
 #define wid 64 
 
-void center_query(const double* restrict ts, const double* restrict mu, double* restrict q, int sublen){
+void center_query(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ q, int sublen){
    q = (double*)__builtin_assume_aligned(q,prefalign);
    const int aligned = sublen <= wid ? sublen : sublen - sublen % wid;
    for(int i = 0; i < aligned; i+= wid){
@@ -15,7 +16,7 @@ void center_query(const double* restrict ts, const double* restrict mu, double* 
    }
 }
 
-void batchcov(const double* restrict ts, const double* restrict mu, const double* restrict query, double* restrict cov, int count, int sublen){
+void batchcov(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ query, double* __restrict__ cov, int count, int sublen){
    query = (double*)__builtin_assume_aligned(query,prefalign);
    cov = (double*)__builtin_assume_aligned(cov,prefalign);
    const int alcount = count <= wid ? count : count - count % wid;

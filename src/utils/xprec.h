@@ -1,48 +1,52 @@
-#include<math.h>
+#include<cmath>
 #pragma once
 
 // Collection of in place 2 operand arithmetic and sliding window sum and average. These are based on 
 // ACCURATE SUM AND DOT PRODUCT Ogita et al
 
 
-static inline void xadd (double a, double b){
-   double c = a + b;
-   double d = c - a;
+template<typename dtype>
+static inline void xadd (dtype& a, dtype& b){
+   dtype c = a + b;
+   dtype d = c - a;
    b = ((a - (c - d)) + (b - d));
    a = c;
 }
 
 
-static inline void xmul (double a, double b){
-   double c = a * b;
-   b = fma(a, b, -1 * c);
+template<typename dtype>
+static inline void xmul (dtype &a, dtype& b){
+   dtype c = a*b;
+   b = fma(a,b,-1*c);
    a = c;
 }
 
 
-void fast_invcn(double* restrict invn, const double* restrict ts, const double* restrict mu, int len, int sublen){
-   double a = 0;
+template<typename dtype>
+void fast_invcn(dtype* __restrict__ invn, const dtype* __restrict__ ts, const dtype* __restrict__ mu, int len, int sublen){
+   dtype a = 0;
    for(int i = 0; i < sublen; i++){
-      double t = ts[i] - mu[0];
+      dtype t = ts[i] - mu[0];
       a += t * t;
    }
    invn[0] = sqrt(1.0/a);
    for(int i = 1; i < len - sublen + 1; i++){
-      double b = ts[i + sublen - 1];
-      double c = ts[i - 1];
+      dtype b = ts[i + sublen - 1];
+      dtype c = ts[i - 1];
       a += ((b - mu[i + sublen - 1]) + (c - mu[i - 1])) * (b - c); 
       invn[i - sublen + 1] = 1.0/sqrt(a);
    }
 }
 
 
-double invcn(const double* restrict ts, const double* restrict sI, double z, int winlen){
-   double p = ts[0] - z;
-   double s = p;
+template<typename dtype>
+dtype invcn(const dtype* __restrict__ ts, const dtype* __restrict__ sI, dtype z, int winlen){
+   dtype p = ts[0] - z;
+   dtype s = p;
    xmul(p,s);
    for(int i = 1; i < winlen; i++){
-       double h = ts[i] - z;
-       double r = h;
+       dtype h = ts[i] - z;
+       dtype r = h;
        xmul(h, r);
        xadd(p, h);
        s += (h + r);
@@ -53,7 +57,8 @@ double invcn(const double* restrict ts, const double* restrict sI, double z, int
 }
 
 
-void xInvn(const double* restrict ts, const double* restrict mu, double* restrict sI, int len, int winlen){
+template<typename dtype>
+void xsInv(const dtype *ts, const dtype *mu, dtype *sI, int len, int winlen){
    int mlen = len - winlen + 1;
    #pragma omp parallel for
    for(int i = 0; i < mlen; i++){
@@ -62,8 +67,9 @@ void xInvn(const double* restrict ts, const double* restrict mu, double* restric
 }
 
 
-void xmean_windowed(const double* restrict ts, double* restrict mu, int len, int winlen){
-   double u, v, w, x, y;
+template<typename dtype>
+void xmean_windowed(const dtype *ts, dtype *mu, int len, int winlen){
+   dtype u, v, w, x, y;
    u = ts[0];
    v = 0;
    for(int i = 1; i < winlen; i++){
@@ -91,9 +97,10 @@ void xmean_windowed(const double* restrict ts, double* restrict mu, int len, int
 }
 
 
-void sum_windowed(const double* restrict ts, double* restrict s, int len, int winlen){
+template<typename dtype>
+void sum_windowed(const dtype* ts, dtype *s, int len, int winlen){
    int mlen = len - winlen + 1;
-   double u, v, w, x, y;
+   dtype u, v, w, x, y;
    u = ts[0];
    v = 0;
    for(int i = 1; i < winlen; i++){

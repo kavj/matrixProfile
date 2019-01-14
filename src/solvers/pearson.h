@@ -1,17 +1,33 @@
+#include "../utils/descriptors.h"
 
-typedef struct profile{
-   double* matrixProfile;
-   long long* matrixProfileIndex;
-} mprofile;
+typedef primbuf<double> dsbuf;
+typedef primbuf<long long> lsbuf;  
+typedef multibuf<double> mdsbuf; 
+typedef multibuf<long long> mdsibuf;
+typedef double dtype;
+
+int pearson_pauto_reduc(dsbuf& ts, 
+                         dsbuf& mp, 
+                         lsbuf& mpi, 
+                         long long minlag, 
+                         long long sublen);
+
+int pearson_pauto_reduc_ref(dsbuf& ts, 
+                         dsbuf& mp, 
+                         lsbuf& mpi, 
+                         long long minlag, 
+                         long long sublen);
 
 
-mprofile pearson_pauto_reduc(const double* ts, long long len, long long minlag, long long sublen); 
+int pearson_pauto_tileref(dsbuf& ts, 
+                          dsbuf& mp, 
+                          lsbuf& mpi, 
+                          long long minlag, 
+                          long long sublen);
 
-
-//Todo: Figure out what to do with error handling
-/*namespace errs{
+namespace errs{
    const int bad_input = -1;
    const int mem_error = -1;
    const int none = 0;
 
-};*/
+};
