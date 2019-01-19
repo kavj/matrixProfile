@@ -40,6 +40,6 @@ template<typename dtype> struct tilebuf{
 };
 
 typedef tilebuf<double> bufd;
-typedef tilebuf<long long> bufi;
+typedef tilebuf<int> bufi;
 
 #endif

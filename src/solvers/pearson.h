@@ -1,9 +1,7 @@
 #include "../utils/descriptors.h"
 
-int partialauto(bufd& ts, bufd& mp, bufi& mpi, long long minlag, long long sublen);
+int partialauto(bufd& ts, bufd& mp, bufi& mpi, int minlag, int sublen);
 
-// cross
-//int partialauto(bufd& ts, bufd& mp, bufi& mpi, long long minlag, long long sublen);
 
 
 namespace errs{
