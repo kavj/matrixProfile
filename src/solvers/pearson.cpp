@@ -1,10 +1,11 @@
 #include <iostream>
-#include "../utils/xprec.h"
-#include "../utils/cov.h"
+//#include "../utils/xprec.h"
+//#include "../utils/cov.h"
 #include "../utils/alloc.h"
 #include <omp.h>
 #include <array>
 #include "pearson.h"
+#include "../utils/moments.h"
 constexpr long long klen  = 256; 
 
 static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ df, double* __restrict__ dg, long long len, long long sublen){
@@ -129,8 +130,11 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
    if(!(mu.valid() && df.valid() && dg.valid() && invn.valid())){
       return errs::mem_error;
    }
-   xmean_windowed(ts(0), mu(0), ts.len, sublen);
-   xsInv(ts(0), mu(0), invn(0), ts.len, sublen);   
+   
+   
+   sw_mean(ts(0), mu(0), ts.len, sublen);
+   sw_inv_meancentered_norm(ts(0), mu(0), invn(0), ts.len, sublen);
+
    dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
    #pragma omp parallel for
    for(long long i = 0; i < tilesperdim; i++){
