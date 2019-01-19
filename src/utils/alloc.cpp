@@ -13,7 +13,7 @@ int paddedlen(int buflen, int alignmt){
    return buflen + (buflen % alignmt ? alignmt - buflen % alignmt : 0);
 }
 
-void* init_buffer(int buflen, int alignmt){
+void* alloc_aligned_buffer(int buflen, int alignmt){
    void* buf;
    int chk = posix_memalign((void**)&buf, alignmt, buflen);
    if(chk != 0){
@@ -27,4 +27,8 @@ void* init_buffer(int buflen, int alignmt){
       }
    }
    return buf;
+}
+
+void dealloc_aligned_buffer(void* buf){
+   free(buf);
 }

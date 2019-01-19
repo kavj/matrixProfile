@@ -118,27 +118,27 @@ static inline void pauto_pearson_edge(
    }
 }
 
-int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long long sublen){
+int partialauto(bufd& ts, bufd& mp, bufi& mpi, long long minlag, long long sublen){
    if(!(ts.valid() && mp.valid() && mpi.valid())){
       return errs::bad_input;  // Todo: Build a real set of error checking functions 
    }
+   const int qstride = paddedlen(sublen, prefalign);
    const long long mlen = ts.len - sublen + 1;
    const long long tlen = std::max(static_cast<long long>(2 << 14), 4 * sublen - (4 * sublen) % klen);        
    const long long tilesperdim = (mlen - minlag)/tlen + ((mlen - minlag) % tlen ? 1 : 0);
-   dsbuf mu(mlen); dsbuf invn(mlen); dsbuf df(mlen);  
-   dsbuf dg(mlen); dsbuf cov(mlen);  mdsbuf q(tilesperdim, sublen);
+   bufd mu(mlen); bufd invn(mlen); bufd df(mlen);  
+   bufd dg(mlen); bufd cov(mlen);  bufd q(tilesperdim * qstride);
    if(!(mu.valid() && df.valid() && dg.valid() && invn.valid())){
       return errs::mem_error;
    }
    
-   
-   sw_mean(ts(0), mu(0), ts.len, sublen);
-   sw_inv_meancentered_norm(ts(0), mu(0), invn(0), ts.len, sublen);
+   sw_mean(ts(), mu(), ts.len, sublen);
+   sw_inv_meancentered_norm(ts(), mu(), invn(), ts.len, sublen);
 
-   dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
+   dfdg_init(ts(), mu(), df(), dg(), ts.len, sublen);
    #pragma omp parallel for
    for(long long i = 0; i < tilesperdim; i++){
-      center_query(ts(i * tlen), mu(i * tlen), q(i), sublen); 
+      center_query(ts(i * tlen), mu(i * tlen), q(i * qstride), sublen); 
    }
    for(long long diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for 
@@ -146,17 +146,17 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, long long minlag, long
          const long long di = diag * tlen + minlag;
          const long long ofi = ofst * tlen;
          const long long dlim = std::min(di + tlen, mlen - ofi);
-         batchcov(ts(di + ofi), mu(di + ofi), q(ofst), cov(ofi), dlim - di, sublen);
+         autocov(ts(di + ofi), mu(di + ofi), q(ofst * qstride), cov(ofi), dlim - di, sublen);
          for(long long d = di; d < dlim; d += klen){
             if(d + klen <= dlim){
-               const long long ral = std::max(static_cast<long long>(0), std::min(tlen, mlen - d - ofi - klen)); // stupid compiler
+               const long long ral = std::min(tlen, mlen - d - ofi - klen + 1); 
                pauto_pearson_kern(cov(ofi + d - di), mp(ofi), mpi(ofi), df(ofi), dg(ofi), invn(ofi), ofi, d, ral);
                if(ral < tlen){
-                  pauto_pearson_edge(cov(ofi + d - di), mp(0), mpi(0), df(0), dg(0), invn(0), ofi + ral, d, d + klen, mlen, false);
+                  pauto_pearson_edge(cov(ofi + d - di), mp(), mpi(), df(), dg(), invn(), ofi + ral, d, d + klen, mlen, false);
                }
             }
             else{
-               pauto_pearson_edge(cov(ofi + d - di), mp(0), mpi(0), df(0), dg(0), invn(0), ofi, d, dlim, mlen, true);
+               pauto_pearson_edge(cov(ofi + d - di), mp(), mpi(), df(), dg(), invn(), ofi, d, dlim, mlen, true);
             }
          }
       }
