@@ -1,11 +1,13 @@
 #include <iostream>
-//#include "../utils/xprec.h"
-//#include "../utils/cov.h"
+#include <cmath>
 #include "../utils/alloc.h"
 #include <omp.h>
 #include <array>
 #include "pearson.h"
 #include "../utils/moments.h"
+
+using namespace pearson;
+
 constexpr int klen  = 256; 
 struct argmax{
    double val;
@@ -13,6 +15,12 @@ struct argmax{
 };
 
 
+void pearson::tonormalizedeuclidean(double* mp, int len, int sublen){
+   #pragma omp parallel for
+   for(int i = 0; i < len - sublen + 1; i++){
+      mp[i] = sqrt(2 * sublen * (1 - mp[i]));
+   }
+}
 
 static void dfdg_init(const double* __restrict ts, const double* __restrict mu, double* __restrict df, double* __restrict dg, int len, int sublen){
    df[0] = 0;
@@ -58,6 +66,134 @@ static inline struct argmax pw_reduc(std::array<double, klen>& cr){
    struct argmax r = {cr[0], ci[0]};
    return r;
 }
+
+
+static inline void partialcross_kern(
+   double*       __restrict cov,
+   double*       __restrict mp,
+   int*          __restrict mpi,
+   const double* __restrict dfa,
+   const double* __restrict dga,
+   const double* __restrict invna,
+   const double* __restrict dfb,
+   const double* __restrict dgb,
+   const double* __restrict invnb,
+   const int amx, const int bmx)
+{
+   dfa   = (const double*)__builtin_assume_aligned(dfa, prefalign);
+   dga   = (const double*)__builtin_assume_aligned(dga, prefalign);
+   invna = (const double*)__builtin_assume_aligned(invna, prefalign);
+   dfb   = (const double*)__builtin_assume_aligned(dfb, prefalign);
+   dgb   = (const double*)__builtin_assume_aligned(dgb, prefalign);
+   invnb = (const double*)__builtin_assume_aligned(invnb, prefalign);
+   mp   = (double*) __builtin_assume_aligned(mp, prefalign);
+   mpi  = (int*) __builtin_assume_aligned(mpi, prefalign);
+   cov  = (double*)__builtin_assume_aligned(cov, prefalign);
+
+   for(int ia = 0; ia < amx; ia++){
+      double cr = cov[ia] * invna[ia] * invnb[0];
+      if(cr > mp[ia]){
+         mp[ia] = cr;
+         mpi[ia] = ia;
+      }
+   }
+   for(int ia = 0; ia < amx; ia++){
+      int mx = std::min(amx - ia, bmx);
+      for(int ib = 1; ib < mx; ib++){
+         cov[ia] += dfa[ib + ia] * dgb[ib];
+         cov[ia] += dfb[ib] * dga[ib + ia];
+         double cr = cov[ia] * invna[ib + ia] * invnb[ib];
+         if(cr > mp[ib + ia]){
+            mp[ib + ia] = cr;
+            mpi[ib + ia] = ib;
+         }
+      }
+   }
+}
+
+
+static inline void partialcross_transkern(
+   double*       __restrict cov,
+   double*       __restrict mp,
+   int*          __restrict mpi,
+   const double* __restrict dfa,
+   const double* __restrict dga,
+   const double* __restrict invna,
+   const double* __restrict dfb,
+   const double* __restrict dgb,
+   const double* __restrict invnb,
+   const int amx, const int bmx)
+{
+   dfa   = (const double*)__builtin_assume_aligned(dfa, prefalign);
+   dga   = (const double*)__builtin_assume_aligned(dga, prefalign);
+   invna = (const double*)__builtin_assume_aligned(invna, prefalign);
+   dfb   = (const double*)__builtin_assume_aligned(dfb, prefalign);
+   dgb   = (const double*)__builtin_assume_aligned(dgb, prefalign);
+   invnb = (const double*)__builtin_assume_aligned(invnb, prefalign);
+   mp   = (double*) __builtin_assume_aligned(mp, prefalign);
+   mpi  = (int*) __builtin_assume_aligned(mpi, prefalign);
+   cov  = (double*)__builtin_assume_aligned(cov, prefalign);
+
+   for(int ib = 0; ib < bmx; ib++){
+      double cr = cov[ib] * invna[0] * invnb[ib];
+      if(cr > mp[0]){
+         mp[0] = cr;
+         mpi[0] = ib;
+      }
+   }
+   for(int ib = 0; ib < bmx; ib++){
+      int mx = std::min(bmx - ib + 1, amx);
+      for(int ia = 0; ia < mx; ia++){
+         cov[ib] += dfa[ia] * dgb[ia + ib];
+         cov[ib] += dfb[ia + ib] * dga[ia];
+         double cr = cov[ib] * invna[ia] * invnb[ia + ib];
+         if(cr > mp[ia]){
+            mp[ia] = cr;
+            mpi[ia] = ia + ib;
+         }
+      }
+   }
+}
+
+
+int pearson::partialcross(bufd& a, bufd& b, bufd& mp, bufi& mpi, int sublen){
+   if(!(a.valid() && b.valid() && mp.valid() && mpi.valid())){
+      return errs::bad_input;  // Todo: Build a real set of error checking functions 
+   }
+   const int qstride = paddedlen(sublen, prefalign);
+   const int amx = a.len - sublen + 1;
+   const int bmx = b.len - sublen + 1;
+   const int tlen = std::max(static_cast<int>(2 << 14), 4 * sublen - (4 * sublen) % klen);        
+   const int tilesperdima = amx/tlen +  amx % tlen ? 1 : 0;
+   const int tilesperdimb = bmx/tlen + bmx % tlen ? 1 : 0;
+   bufd mua(amx); bufd invna(amx); bufd dfa(amx); bufd dga(amx); bufd mub(bmx); bufd invnb(bmx);
+   bufd dfb(bmx); bufd dgb(bmx);   bufd cov(bmx); bufd q(std::max(tilesperdima, tilesperdimb) * qstride);
+   if(!(mua.valid() && invna.valid() && dfa.valid() && dga.valid() && mub.valid() && invnb.valid()) && invnb.valid() && dfb.valid() && dgb.valid() && cov.valid()){
+      return errs::mem_error;
+   }
+   sw_mean(a(), mua(), a.len, sublen);
+   sw_mean(b(), mub(), b.len, sublen);
+   sw_inv_meancentered_norm(a(), mua(), invna(), a.len, sublen);
+   sw_inv_meancentered_norm(b(), mub(), invnb(), b.len, sublen);
+   dfdg_init(a(), mua(), dfa(), dga(), a.len, sublen);
+   dfdg_init(b(), mub(), dfb(), dgb(), b.len, sublen);
+
+   #pragma omp parallel for
+  /* for(int i = 0; i < tilesperdim; i++){
+      center_query(ts(i * tlen), mu(i * tlen), q(i * qstride), sublen); 
+   }*/
+   
+   center_query(b(), mub(), q(), sublen); 
+   crosscov(a(), mua(), q(), cov(), amx, sublen); 
+   partialcross_kern(cov(), mp(), mpi(), dfa(), dga(), invna(), dfb(), dgb(), invnb(), amx, bmx); 
+   center_query(a(), mua(), q(), sublen);
+   crosscov(b(), mub(), q(), cov(), bmx, sublen);
+   partialcross_kern(cov(), mp(), mpi(), dfa(), dga(), invna(), dfb(), dgb(), invnb(), amx, bmx); 
+
+   return pearson::errs::none;
+}
+
+
 
 static inline void partialauto_kern(
    double*       __restrict  cov,
@@ -133,7 +269,7 @@ static inline void partialauto_edge(
 
 
 
-int partialauto(bufd& ts, bufd& mp, bufi& mpi, int minlag, int sublen){
+int pearson::partialauto(bufd& ts, bufd& mp, bufi& mpi, int minlag, int sublen){
    if(!(ts.valid() && mp.valid() && mpi.valid())){
       return errs::bad_input;  // Todo: Build a real set of error checking functions 
    }
@@ -161,14 +297,14 @@ int partialauto(bufd& ts, bufd& mp, bufi& mpi, int minlag, int sublen){
          const int di = diag * tlen + minlag;
          const int ofi = ofst * tlen;
          const int dlim = std::min(di + tlen, mlen - ofi);
-         autocov(ts(di + ofi), mu(di + ofi), q(ofst * qstride), cov(ofi), dlim - di, sublen);
+         crosscov(ts(di + ofi), mu(di + ofi), q(ofst * qstride), cov(ofi), dlim - di, sublen);
          for(int d = di; d < dlim; d += klen){
-            const int ral = std::min(tlen, mlen - d - ofi - klen + 1); 
-            partialauto_kern(cov(ofi + d - di), mp(ofi), mpi(ofi), df(ofi), dg(ofi), invn(ofi), ofi, d, ral);
-            if(ral > 0 && ral < tlen){
-               partialauto_edge(cov(ofi + d - di), mp(), mpi(), df(), dg(), invn(), ofi + ral, d, d + klen, mlen, false);
+            const int aligned_rlim = std::min(tlen, mlen - d - ofi - klen + 1); 
+            partialauto_kern(cov(ofi + d - di), mp(ofi), mpi(ofi), df(ofi), dg(ofi), invn(ofi), ofi, d, aligned_rlim);
+            if(aligned_rlim > 0 && aligned_rlim < tlen){
+               partialauto_edge(cov(ofi + d - di), mp(), mpi(), df(), dg(), invn(), ofi + aligned_rlim, d, d + klen, mlen, false);
             }
-            else if(ral == 0){
+            else if(aligned_rlim == 0){
                partialauto_edge(cov(ofi + d - di), mp(), mpi(), df(), dg(), invn(), ofi, d, dlim, mlen, true);
             }
          }
@@ -176,4 +312,5 @@ int partialauto(bufd& ts, bufd& mp, bufi& mpi, int minlag, int sublen){
    }
    return errs::none;
 }
+
 

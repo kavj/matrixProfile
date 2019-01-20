@@ -14,7 +14,7 @@ void center_query(const double* __restrict ts, const double* __restrict mu, doub
    }
 }
 
-void autocov(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ query, double* __restrict__ cov, int count, int sublen){
+void crosscov(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ query, double* __restrict__ cov, int count, int sublen){
    query = (double*)__builtin_assume_aligned(query,prefalign);
    cov = (double*)__builtin_assume_aligned(cov,prefalign);
    const int alcount = count <= wid ? count : count - count % wid;
