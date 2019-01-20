@@ -7,8 +7,14 @@
 #include "pearson.h"
 #include "../utils/moments.h"
 constexpr int klen  = 256; 
+struct argmax{
+   double val;
+   int ind;
+};
 
-static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ df, double* __restrict__ dg, int len, int sublen){
+
+
+static void dfdg_init(const double* __restrict ts, const double* __restrict mu, double* __restrict df, double* __restrict dg, int len, int sublen){
    df[0] = 0;
    dg[0] = 0;
    for(int i = 0; i < len - sublen; i++){
@@ -17,13 +23,49 @@ static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ 
    }
 }
 
-static inline void pauto_pearson_kern(
-   double*       __restrict__  cov,
-   double*       __restrict__  mp,
-   int*    __restrict__ mpi,
-   const double* __restrict__ df,
-   const double* __restrict__ dg,
-   const double* __restrict__ invn,
+static inline struct argmax pw_reduc(std::array<double, klen>& cr){
+   std::array<int, klen/2> ci;
+   for(int i = 0; i < 128; i++){
+      ci[i] = cr[i] > cr[i + 128] ? i : i + 128;
+      cr[i] = cr[i] > cr[i + 128] ? cr[i] : cr[i + 128];
+   }
+   for(int i = 0; i < 64; i++){ 
+      ci[i] = cr[i] > cr[i + 64] ? ci[i] : ci[i + 64];
+      cr[i] = cr[i] > cr[i + 64] ? cr[i] : cr[i + 64];
+   }
+   for(int i = 0; i < 32; i++){
+      ci[i] = cr[i] > cr[i + 32] ? ci[i] : ci[i + 32];
+      cr[i] = cr[i] > cr[i + 32] ? cr[i] : cr[i + 32];
+   } 
+   for(int i = 0; i < 16; i++){
+      ci[i] = cr[i] > cr[i + 16] ? ci[i] : ci[i + 16];
+      cr[i] = cr[i] > cr[i + 16] ? cr[i] : cr[i + 16];
+   }
+   for(int i = 0; i < 8; i++){
+      ci[i] = cr[i] > cr[i + 8] ? ci[i] : ci[i + 8];
+      cr[i] = cr[i] > cr[i + 8] ? cr[i] : cr[i + 8];
+   }
+   for(int i = 0; i < 4; i++){
+      ci[i] = cr[i] > cr[i + 4] ? ci[i] : ci[i + 4];
+      cr[i] = cr[i] > cr[i + 4] ? cr[i] : cr[i + 4];
+   }
+   for(int i = 0; i < 2; i++){
+      ci[i] = cr[i] > cr[i + 2] ? ci[i] : ci[i + 2];
+      cr[i] = cr[i] > cr[i + 2] ? cr[i] : cr[i+2];
+   }
+   ci[0] = cr[0] > cr[1] ? ci[0] : ci[1];
+   cr[0] = cr[0] > cr[1] ? cr[0] : cr[1];
+   struct argmax r = {cr[0], ci[0]};
+   return r;
+}
+
+static inline void partialauto_kern(
+   double*       __restrict  cov,
+   double*       __restrict  mp,
+   int*          __restrict mpi,
+   const double* __restrict df,
+   const double* __restrict dg,
+   const double* __restrict invn,
    const int ofr,
    const int ofc,
    const int iters)
@@ -49,50 +91,21 @@ static inline void pauto_pearson_kern(
             mpi[r + d + ofc] = r + ofr;
          }
       }
-      std::array<int, klen/2> ci;
-      for(int i = 0; i < 128; i++){
-         ci[i] = cr[i] > cr[i + 128] ? i : i + 128;
-         cr[i] = cr[i] > cr[i + 128] ? cr[i] : cr[i + 128];
+      struct argmax p = pw_reduc(cr);
+      if(p.val > mp[r]){
+         mp[r] = p.val;
+         mpi[r] = p.ind + r + ofr + ofc;
       }
-      for(int i = 0; i < 64; i++){ // gcc can generally simplify conditional writes using if statements to masked writes, but in this case
-                                         // it generates all scalar code. For now I rewrote it using ternary operators. I'll file a bug report later.
-         ci[i] = cr[i] > cr[i + 64] ? ci[i] : ci[i + 64];
-         cr[i] = cr[i] > cr[i + 64] ? cr[i] : cr[i + 64];
-      }
-      for(int i = 0; i < 32; i++){
-         ci[i] = cr[i] > cr[i + 32] ? ci[i] : ci[i + 32];
-         cr[i] = cr[i] > cr[i + 32] ? cr[i] : cr[i + 32];
-      } 
-      for(int i = 0; i < 16; i++){
-         ci[i] = cr[i] > cr[i + 16] ? ci[i] : ci[i + 16];
-         cr[i] = cr[i] > cr[i + 16] ? cr[i] : cr[i + 16];
-      }
-      for(int i = 0; i < 8; i++){
-         ci[i] = cr[i] > cr[i + 8] ? ci[i] : ci[i + 8];
-         cr[i] = cr[i] > cr[i + 8] ? cr[i] : cr[i + 8];
-      }
-      for(int i = 0; i < 4; i++){
-         ci[i] = cr[i] > cr[i + 4] ? ci[i] : ci[i + 4];
-         cr[i] = cr[i] > cr[i + 4] ? cr[i] : cr[i + 4];
-      }
-      for(int i = 0; i < 2; i++){
-         ci[i] = cr[i] > cr[i + 2] ? ci[i] : ci[i + 2];
-         cr[i] = cr[i] > cr[i + 2] ? cr[i] : cr[i+2];
-      }
-      ci[0] = cr[0] > cr[1] ? ci[0] : ci[1];
-      cr[0] = cr[0] > cr[1] ? cr[0] : cr[1];
-      mpi[r] = mp[r] > cr[0] ? mpi[r] : ci[0] + r + ofr + ofc;
-      mp[r] =  mp[r] > cr[0] ? mp[r] : cr[0];
    }
 }
 
-static inline void pauto_pearson_edge(
-   double*       __restrict__ cov, 
-   double*       __restrict__ mp,  
-   int*    __restrict__ mpi, 
-   const double* __restrict__ df,  
-   const double* __restrict__ dg, 
-   const double* __restrict__ invn, 
+static inline void partialauto_edge(
+   double*       __restrict cov, 
+   double*       __restrict mp,  
+   int*          __restrict mpi, 
+   const double* __restrict df,  
+   const double* __restrict dg, 
+   const double* __restrict invn, 
    const int ofr, 
    const int ofd, 
    const int dlim,
@@ -117,6 +130,8 @@ static inline void pauto_pearson_edge(
       }
    }
 }
+
+
 
 int partialauto(bufd& ts, bufd& mp, bufi& mpi, int minlag, int sublen){
    if(!(ts.valid() && mp.valid() && mpi.valid())){
@@ -148,15 +163,13 @@ int partialauto(bufd& ts, bufd& mp, bufi& mpi, int minlag, int sublen){
          const int dlim = std::min(di + tlen, mlen - ofi);
          autocov(ts(di + ofi), mu(di + ofi), q(ofst * qstride), cov(ofi), dlim - di, sublen);
          for(int d = di; d < dlim; d += klen){
-            if(d + klen <= dlim){
-               const int ral = std::min(tlen, mlen - d - ofi - klen + 1); 
-               pauto_pearson_kern(cov(ofi + d - di), mp(ofi), mpi(ofi), df(ofi), dg(ofi), invn(ofi), ofi, d, ral);
-               if(ral < tlen){
-                  pauto_pearson_edge(cov(ofi + d - di), mp(), mpi(), df(), dg(), invn(), ofi + ral, d, d + klen, mlen, false);
-               }
+            const int ral = std::min(tlen, mlen - d - ofi - klen + 1); 
+            partialauto_kern(cov(ofi + d - di), mp(ofi), mpi(ofi), df(ofi), dg(ofi), invn(ofi), ofi, d, ral);
+            if(ral > 0 && ral < tlen){
+               partialauto_edge(cov(ofi + d - di), mp(), mpi(), df(), dg(), invn(), ofi + ral, d, d + klen, mlen, false);
             }
-            else{
-               pauto_pearson_edge(cov(ofi + d - di), mp(), mpi(), df(), dg(), invn(), ofi, d, dlim, mlen, true);
+            else if(ral == 0){
+               partialauto_edge(cov(ofi + d - di), mp(), mpi(), df(), dg(), invn(), ofi, d, dlim, mlen, true);
             }
          }
       }
