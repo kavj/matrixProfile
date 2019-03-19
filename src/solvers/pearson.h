@@ -1,29 +1,29 @@
 #include "../utils/descriptors.h"
 
 typedef primbuf<double> dsbuf;
-typedef primbuf<long long> lsbuf;  
+typedef primbuf<int> lsbuf;  
 typedef multibuf<double> mdsbuf; 
-typedef multibuf<long long> mdsibuf;
+typedef multibuf<int> mdsibuf;
 typedef double dtype;
 
 int pearson_pauto_reduc(dsbuf& ts, 
                          dsbuf& mp, 
                          lsbuf& mpi, 
-                         long long minlag, 
-                         long long sublen);
+                         int minlag, 
+                         int sublen);
 
 int pearson_pauto_reduc_ref(dsbuf& ts, 
                          dsbuf& mp, 
                          lsbuf& mpi, 
-                         long long minlag, 
-                         long long sublen);
+                         int minlag, 
+                         int sublen);
 
 
 int pearson_pauto_tileref(dsbuf& ts, 
                           dsbuf& mp, 
                           lsbuf& mpi, 
-                          long long minlag, 
-                          long long sublen);
+                          int minlag, 
+                          int sublen);
 
 namespace errs{
    const int bad_input = -1;

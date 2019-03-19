@@ -1,9 +1,12 @@
-#include "../arch/avx256.h"
-#define prefalign 64 
-// Todo: Split reference and simd types
-#define wid 32
-#define unroll 8
+#ifndef __MOMENTS__
+#define __MOMENTS__
 
-void center_query(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ q, int sublen);
+void centerQuery(const double* __restrict ts, double* __restrict qBuffer, double mu, int sublen);
 
-void batchcov(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ query, double* __restrict__ cov, int count, int sublen);
+void crossCov(const double* __restrict ts, const double* __restrict mu, const double* __restrict query, double* __restrict cov, int count, int sublen);
+
+void windowedMean(double* __restrict a, double* __restrict mu, int len, int winlen);
+
+void windowedInverseCenteredNorm(double* __restrict a, double* __restrict mu, double* __restrict invn, int len, int winlen);
+
+#endif
