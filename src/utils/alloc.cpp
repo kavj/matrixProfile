@@ -1,30 +1,49 @@
+#include "defs.h"
+#include "alloc.h"
 
+size_t paddedLen(size_t alignment, size_t byteLen){
+   return byteLen + (byteLen % alignment ? alignment - byteLen % alignment : 0);
+}
 
+#if CAN_USE_ALIGNED_MALLOC
+// windows
+#include<malloc.h>
 
-#define _POSIX_C_SOURCE 200809L
+#else
+
 #include<cstdlib>
-#include<cstdio>
-#include<cerrno>
 
-//Todo: This should be generalized 
-// Also: Marked these inline to avoid multiple inclusions due to inlining of other functions. Find a better solution for this.
- 
-int paddedlen(int buflen, int alignmt){
-   return buflen + (buflen % alignmt ? alignmt - buflen % alignmt : 0);
+#endif
+
+
+void* allocMem(size_t alignment, size_t byteLen){
+   #if CAN_USE_ALIGNED_MALLOC
+  
+   return _aligned_malloc(byteLen, alignment);
+
+   #elif CAN_USE_ALIGNED_ALLOC
+
+   return aligned_alloc(alignment, byteLen);
+
+   #elif CAN_USE_POSIX_MEMALIGN 
+
+   void* dat;
+   int err = posix_memalign((void**)&dat, alignment, byteLen);
+   return err == 0 ? dat : nullptr;; 
+
+   #else
+   
+   return malloc(byteLen);
+
+   #endif
 }
 
-void* init_buffer(int buflen, int alignmt){
-   void* buf;
-   int chk = posix_memalign((void**)&buf, alignmt, buflen);
-   if(chk != 0){
-      if((chk == EINVAL) || (chk == ENOMEM)){
-         perror("posix_memalign");
-         exit(1);
-      }
-      else{
-         printf("unknown error\n");
-         exit(1);
-      }
-   }
-   return buf;
+
+void deallocMem(void* dat){
+#if CAN_USE_ALIGNED_MALLOC
+   _aligned_free(dat);
+#else
+   free(dat);
+#endif
 }
+

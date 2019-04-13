@@ -1,18 +1,23 @@
 
 
-CC = gcc
+CC = ~/gcc-versions/8.3/bin/g++ 
 
-CFLAGS =  -O3 -march=native -funroll-loops -std=c++11  
+CPPFLAGS = -I$(SRC)
+
+CFLAGS =  -O3 -march=native -funroll-loops -fprefetch-loop-arrays
+
+CXXFLAGS = $(CFLAGS) -std=c++11 
+
+DIRS = -Isrc -Isrc/solvers/ -Isrc/utils/ 
 
 LFLAGS =  -lm  
 
 ASMFLAGS = -S   -masm=intel -fno-asynchronous-unwind-tables -fno-exceptions -fno-rtti -fverbose-asm
 
-SRC = src/utils/cov.cpp src/simple_driver.cpp  src/solvers/pearson.cpp src/utils/alloc.cpp src/utils/primitive_print_funcs.cpp  
-
+SRC = src/utils/moments.cpp src/main.cpp  src/solvers/pearson.cpp src/utils/alloc.cpp src/utils/primitive_print_funcs.cpp  
 
 opt:
-	$(CC) $(SRC)   $(CFLAGS) $(LFLAGS) 
+	$(CC) $(DIRS) $(SRC) -o mpSolve $(CFLAGS) $(LFLAGS) 
 
 asm:
 	$(CC) $(SRC)   $(CFLAGS) $(ASMFLAGS) 

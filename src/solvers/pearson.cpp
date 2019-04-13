@@ -1,11 +1,8 @@
-#include<immintrin.h>
-#include <iostream>
-//#include "../utils/xprec.h"
-#include "../utils/cov.h"
-#include "../utils/alloc.h"
-#include <omp.h>
 #include <array>
+#include<immintrin.h>
 #include "pearson.h"
+#include "alloc.h"
+#include "moments.h"
 constexpr int klen  = 64; 
 
 static void dfdg_init(const double* __restrict__ ts, const double* __restrict__ mu, double* __restrict__ df, double* __restrict__ dg, int len, int sublen){
@@ -240,7 +237,7 @@ int pearson_pauto_reduc(dsbuf& ts, dsbuf& mp, lsbuf& mpi, int minlag, int sublen
    dfdg_init(ts(0), mu(0), df(0), dg(0), ts.len, sublen);
    #pragma omp parallel for
    for(int i = 0; i < tilesperdim; i++){
-      centerQuery(ts(i * tlen), q(i), *mu(i * tlen), sublen); 
+      meanCenter(ts(i * tlen), q(i), *mu(i * tlen), sublen); 
    }
    for(int diag = 0; diag < tilesperdim; diag++){
       #pragma omp parallel for 

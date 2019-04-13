@@ -1,23 +1,23 @@
+#include "defs.h"
 #include<cmath>
 #include<array>
-#include "cov.h"
+#include "moments.h"
+
 constexpr int simdAlignment  = 64;
 constexpr int blocklen = 32;
 constexpr int wid = 128; // optimize out later
 constexpr int prefalign = 64; // redundant, get rid of later
 
-void centerQuery(const double* __restrict ts, double* __restrict qBuffer, const double mu, int windowLen){
-   qBuffer = (double*)__builtin_assume_aligned(qBuffer, simdAlignment);
-   #pragma omp simd aligned(qBuffer : simdAlignment)
+void meanCenter(const double* __restrict ts, double* __restrict qBuffer, const double mu, int windowLen){
+   qBuffer = static_cast<double*>(isaligned(qBuffer, simdAlignment));
    for(int i = 0; i < windowLen; i++){
       qBuffer[i] = ts[i] - mu;
    }
 }
 
-
 void crossCov(const double* __restrict__ ts, const double* __restrict__ mu, const double* __restrict__ query, double* __restrict__ cov, int count, int windowLen){
-   query = (double*)__builtin_assume_aligned(query,simdAlignment);
-   cov = (double*)__builtin_assume_aligned(cov,simdAlignment);
+   query = static_cast<double*>(isaligned(query,simdAlignment));
+   cov = static_cast<double*>(isaligned(cov,simdAlignment));
    const int alcount = count <= wid ? count : count - count % wid;
    for(int i = 0; i < alcount; i+= wid){
       for(int j = 0; j < wid; j++){
@@ -69,10 +69,9 @@ void windowedMean(double* __restrict a, double* __restrict mu, int len, int winl
 
 
 void windowedInverseCenteredNorm(double* __restrict a, double* __restrict mu, double* __restrict invn, int len, int winlen){
-   mu = static_cast<double*>(__builtin_assume_aligned(mu, prefalign));
-   invn = static_cast<double*>(__builtin_assume_aligned(invn, prefalign));
+   mu = static_cast<double*>(isaligned(mu, prefalign));
+   invn = static_cast<double*>(isaligned(invn, prefalign));
    const int alignedwinlen = (winlen >= blocklen) ? (winlen - winlen % blocklen) : 0;
-  // #pragma omp parallel for
    for(int i = 0; i < len - winlen + 1; i++){
       double accsum = 0;
       double accresid = 0;
@@ -109,7 +108,6 @@ void windowedInverseCenteredNorm(double* __restrict a, double* __restrict mu, do
       }
       invn[i] = accsum + accresid;
    }
-   //#pragma omp parallel for
    for(int i = 0; i < len - winlen + 1; i++){
       invn[i] = 1/sqrt(invn[i]);
    }
