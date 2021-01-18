@@ -27,14 +27,14 @@ void crosscov(double* __restrict cc, double* __restrict ts, double* __restrict m
             __m256d r6 = _mm256_loadu_pd(ts + k + 24);
             __m256d r7 = _mm256_loadu_pd(ts + k + 28);
 
-            __m256d t0 = _mm256_loadu_pd(mu + k);
-            __m256d t1 = _mm256_loadu_pd(mu + k + 4);
-            __m256d t2 = _mm256_loadu_pd(mu + k + 8);
-            __m256d t3 = _mm256_loadu_pd(mu + k + 12);
-            __m256d t4 = _mm256_loadu_pd(mu + k + 16);
-            __m256d t5 = _mm256_loadu_pd(mu + k + 20);
-            __m256d t6 = _mm256_loadu_pd(mu + k + 24);
-            __m256d t7 = _mm256_loadu_pd(mu + k + 28);
+            __m256d t0 = _mm256_loadu_pd(mu + i);
+            __m256d t1 = _mm256_loadu_pd(mu + i + 4);
+            __m256d t2 = _mm256_loadu_pd(mu + i + 8);
+            __m256d t3 = _mm256_loadu_pd(mu + i + 12);
+            __m256d t4 = _mm256_loadu_pd(mu + i + 16);
+            __m256d t5 = _mm256_loadu_pd(mu + i + 20);
+            __m256d t6 = _mm256_loadu_pd(mu + i + 24);
+            __m256d t7 = _mm256_loadu_pd(mu + i + 28);
 
             r0 = _mm256_sub_pd(r0, t0);
             r1 = _mm256_sub_pd(r1, t1);
@@ -46,14 +46,14 @@ void crosscov(double* __restrict cc, double* __restrict ts, double* __restrict m
             r7 = _mm256_sub_pd(r7, t7);
 
             __m256d s = _mm256_broadcast_sd(cmpseq + j);
-            __m256d c0 = _mm256_fmadd_pd(r0, s, c0);
-	    __m256d c1 = _mm256_fmadd_pd(r1, s, c1);
-	    __m256d c2 = _mm256_fmadd_pd(r2, s, c2);
-	    __m256d c3 = _mm256_fmadd_pd(r3, s, c3);
-	    __m256d c4 = _mm256_fmadd_pd(r4, s, c4);
-	    __m256d c5 = _mm256_fmadd_pd(r5, s, c5);
-	    __m256d c6 = _mm256_fmadd_pd(r6, s, c6);
-	    __m256d c7 = _mm256_fmadd_pd(r7, s, c7);
+            c0 = _mm256_fmadd_pd(r0, s, c0);
+	    c1 = _mm256_fmadd_pd(r1, s, c1);
+	    c2 = _mm256_fmadd_pd(r2, s, c2);
+	    c3 = _mm256_fmadd_pd(r3, s, c3);
+	    c4 = _mm256_fmadd_pd(r4, s, c4);
+	    c5 = _mm256_fmadd_pd(r5, s, c5);
+	    c6 = _mm256_fmadd_pd(r6, s, c6);
+	    c7 = _mm256_fmadd_pd(r7, s, c7);
         }
 
 	_mm256_storeu_pd(cc + i, c0);
@@ -68,11 +68,11 @@ void crosscov(double* __restrict cc, double* __restrict ts, double* __restrict m
     }
 
 
-    for(int i = aligned; aligned < seqcount; ++aligned){
+    for(int i = aligned; i < seqcount; ++i){
         double cv = 0;
 	for(int j = 0; j < seqlen; ++j){
             int k = i + j;
-	    cv += (ts[k] - mu[k]) * cmpseq[j];
+	    cv += (ts[k] - mu[i]) * cmpseq[j];
 	}
 	cc[i] = cv;
     }
