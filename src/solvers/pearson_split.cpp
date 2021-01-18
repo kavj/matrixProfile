@@ -52,26 +52,21 @@ IEEE2018 prefers to propagate nan. Matlab prefers to propagate a finite value, w
 Second note...
 
 I have made considerable efforts to improve the stability of lookahead methods wherever possible. 
-I swapped out the method used for difference equations.
-I provided some preprocessing to slightly perturb constant regions.
+I swapped out the method used for difference equations some time ago. This one unfortunately uses 4 arrays rather than 2, but it held up better in stress tests.
+I provided some preprocessing to trim missing leading and trailign sections and slightly perturb sequences of constants.
 
-The last point will be to explicitly detect that divergence has occurred. I used this in writing unit tests previously
-and suggested it to others before that point, but I'm now embedding it in the calculations.
+The last point will be to explicitly detect that divergence has occurred. This is done by explicitly computing the end values for each diagonal
+excluding the last.
 
-Since it's cheap enough to naively compute a linear number of dot products, we can do that to explicitly check the final
-output of the variable "cv" against reference values, computed naively.
-
-If any of these diverge, then we issue a warning and possibly output the corresponding "diagonal" indices.
+This can issue a warning or return the measurements as a "witness" of the calculations.
 
 Last note on implementation...
 
-This is specialized for AVX2. If I include index calculations and want to maintain a reasonably fast implementation,
-I have to use masked writes to minimize register spill. Masked writes do not have good throughput on AMD hardware. Seeing as I
-prefer not to deal with this, I have dropped index calculations.
+This is specialized for AVX2. As it is, this should run quite well on any target that supports AVX2.
+If I have to include index calculations, I either have to reduce throughput by halving the unroll factor
+or accept the use of masked writes, which pessimize run times on AMD hardware.
 
-This implementation is meant to replace the use of "anytime" methods, where you don't get an exact index anyway.
-If you just want the neighbors of the low values, they can be cheaply computed in isolation.
-
+I prefer to ignore this as it keeps the implementation simple.
 
 Reference
 https://www.agner.org/optimize/instruction_tables.pdf
@@ -102,15 +97,13 @@ static inline void pearson_inner(
    __m256d c5 = _mm256_load_pd(cv + 20);
    __m256d c6 = _mm256_load_pd(cv + 24);
    __m256d c7 = _mm256_load_pd(cv + 28);
-   for (int i = 0; i < iters; i++)
+   for (int i = 0; i < iters; ++i)
    {
-      if (i > 0)
+      if (i != 0)
       {
-         // The difference equation indices fold a minus 1 calculation into the constant offset. 
-         // It's attributable to a maximum of subsequence count - 1 steps in total for subsequence count windows
          __m256d dr_bwd_ = _mm256_broadcast_sd(dr_bwd + i - 1);
 
-         // cv - dr_bwd[r] * dc_bwd[col]
+         // cv - dr_bwd[row-1] * dc_bwd[col-1]
          c0 = _mm256_fnmadd_pd(dr_bwd_, _mm256_loadu_pd(dc_bwd + i - 1), c0);
          c1 = _mm256_fnmadd_pd(dr_bwd_, _mm256_loadu_pd(dc_bwd + i + 3), c1);
          c2 = _mm256_fnmadd_pd(dr_bwd_, _mm256_loadu_pd(dc_bwd + i + 7), c2);
@@ -122,7 +115,7 @@ static inline void pearson_inner(
 
          __m256d dr_fwd_ = _mm256_broadcast_sd(dr_fwd + i - 1);
 
-         // cv + dr_fwd[row] * dc_fwd[col]
+         // cv + dr_fwd[row-1] * dc_fwd[col-1]
          c0 = _mm256_fmadd_pd(dr_fwd_, _mm256_loadu_pd(dc_fwd + i - 1), c0);
          c1 = _mm256_fmadd_pd(dr_fwd_, _mm256_loadu_pd(dc_fwd + i + 3), c1);
          c2 = _mm256_fmadd_pd(dr_fwd_, _mm256_loadu_pd(dc_fwd + i + 7), c2);
@@ -132,7 +125,8 @@ static inline void pearson_inner(
          c6 = _mm256_fmadd_pd(dr_fwd_, _mm256_loadu_pd(dc_fwd + i + 23), c6);
          c7 = _mm256_fmadd_pd(dr_fwd_, _mm256_loadu_pd(dc_fwd + i + 27), c7);
       }
-      // invn and mp don't need to fold a -1, so their constants are 1 step higher
+
+      // corr = cv * (1/norm(subseq[row]) * (1/norm(subseq[col]))
       __m256d invn_ = _mm256_broadcast_sd(invnr + i);
       __m256d f0 = _mm256_mul_pd(c0, _mm256_loadu_pd(invnc + i));
       __m256d f1 = _mm256_mul_pd(c1, _mm256_loadu_pd(invnc + i + 4));
@@ -190,17 +184,17 @@ static inline void pearson_inner(
       mpr[i] = q2 > mpr[i] ? q2 : mpr[i];
    }
    /*
-     These stores serve only 2 purposes.
+     These stores serve 2 purposes.
      First, they are used to compute "edge" components, where
      the range of d is constrained to be < unroll width 
      (we're using 32 for AVX)
 
      Second, they are used to compute divergence. Normally we explicitly
-     compute initial co-moments. One way to test that calculations didn't diverge
-     is to explicitly test against the final co-moments.
+     compute initial co-moments. These give the final co-moment values, which are also explicitly computable.
+     One way to test whether divergence occurred during calculations
+     is to explicitly compute final values and test against these.
 
      This will actually tell you if accumulation failed somewhere.
-     Actually it might be worth making that into a standard feature so as to issue an explicit warning.
 
    */
 
@@ -216,10 +210,10 @@ static inline void pearson_inner(
 
 /*
 
-  This is only for constrained cases. 
+  This next part is only for constrained cases. 
 
   Unlike the unconstrained case, we don't rely on
-  knowing dcount. 
+  knowing dcount, (diagonal count, in a hankel function sense). 
 
   rbegin indicates some starting value corresponding
   to an offset.
