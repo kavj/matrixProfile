@@ -237,17 +237,17 @@ static inline void pearson_inner(
 */
 
 static inline void pearson_edge(
-    double* __restrict cov,
-    double* __restrict mpr,
-    double* __restrict mpc,
-    double* __restrict dr_bwd,
-    double* __restrict dc_bwd,
-    double* __restrict dr_fwd,
-    double* __restrict dc_fwd,
-    double* __restrict invnr,
-    double* __restrict invnc,
-    int rbegin,
-    int rcount){
+      double* __restrict cov,
+      double* __restrict mpr,
+      double* __restrict mpc,
+      double* __restrict dr_bwd,
+      double* __restrict dc_bwd,
+      double* __restrict dr_fwd,
+      double* __restrict dc_fwd,
+      double* __restrict invnr,
+      double* __restrict invnc,
+      int rbegin,
+      int rcount){
 
    int dcount = rcount - rbegin;
 
@@ -313,14 +313,17 @@ void compute_self_mp(double* __restrict cv,
                 int dcount){
 
    constexpr int stride = 32;
-
-   for(size_t d = 0; d < dcount; d += stride){
+   int aligned = dcount - dcount % stride;
+   for(size_t d = 0; d < aligned; d += stride){
       // Compute the number of steps over which we can advance cv[i]...cv[i+stride-1], endpoints included
       int full = dcount - d - stride + 1 > 0 ? dcount - d - stride + 1 : 0;
       if(full != 0){
          pearson_inner(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dc_fwd + d, invnr, invnc + d, full);
       }
       pearson_edge(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dc_fwd + d, invnr, invnc + d, full, dcount - d - full);
+   }
+   if(aligned < dcount){
+      pearson_edge(cv + aligned, mpr, mpc + aligned, dr_bwd, dc_bwd + aligned, dr_fwd, dc_fwd + aligned, invnr, invnc + aligned, 0, dcount - aligned);
    }
 }
 
