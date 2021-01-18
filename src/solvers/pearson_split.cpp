@@ -301,7 +301,7 @@ Central Moments with Arbitrary Weights
 
 */
 
-void compute_mp(double* __restrict cv,
+void compute_self_mp(double* __restrict cv,
                 double* __restrict mpr,
                 double* __restrict mpc,
                 double* __restrict dr_bwd,
