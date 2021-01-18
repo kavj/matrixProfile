@@ -3,9 +3,8 @@
 #include "cross_cov.h"
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray* prhs[] ){
-    // cv, r_bwd, c_bwd, r_fwd, c_fwd, invn_r, invn_c
 
-    if(nrhs != 7){
+    if(nrhs != 3){
         mexErrMsgIdAndTxt( "MATLAB:invalidNumInputs", "(required signature is (ts, mu, cmpseq).");
     }
     else if (nlhs != 1){
@@ -28,7 +27,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray* prhs[] ){
 
     mxArray* cv_ = mxCreateDoubleMatrix(dcount, 1, mxREAL);
     double* cv = mxGetDoubles(cv_);
-
+    //mexPrintf("tslen:%d dcount:%d sublen:%d \n", tslen, dcount, sublen);
     // co-moments contain comparison between index 0 and index minsep....subcount
  
     crosscov(cv, ts, mu, cmpseq, dcount, sublen);

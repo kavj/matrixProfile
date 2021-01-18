@@ -4,8 +4,9 @@
 const int stride{32};
 
 void crosscov(double* __restrict cc, double* __restrict ts, double* __restrict mu, double* __restrict cmpseq, int seqcount, int seqlen){
+    int aligned = seqcount - seqcount % stride;
 
-    for(int i = 0; i < seqcount; i += stride){
+    for(int i = 0; i < aligned; i += stride){
         __m256d c0 = _mm256_setzero_pd();
         __m256d c1 = _mm256_setzero_pd();
         __m256d c2 = _mm256_setzero_pd();
@@ -64,6 +65,16 @@ void crosscov(double* __restrict cc, double* __restrict ts, double* __restrict m
 	_mm256_storeu_pd(cc + i + 24, c6);
 	_mm256_storeu_pd(cc + i + 28, c7);
 
+    }
+
+
+    for(int i = aligned; aligned < seqcount; ++aligned){
+        double cv = 0;
+	for(int j = 0; j < seqlen; ++j){
+            int k = i + j;
+	    cv += (ts[k] - mu[k]) * cmpseq[j];
+	}
+	cc[i] = cv;
     }
 }
 

@@ -1,3 +1,4 @@
+#include<algorithm>
 #include "mex.h"
 #include "matrix.h"
 #include "pearson_split.h"
@@ -28,6 +29,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray* prhs[] ){
 
     double* mp_r = mxGetDoubles(mp_r_);
     double* mp_c = mxGetDoubles(mp_c_);
+
+    std::fill_n(mp_r, -1.0, dcount);
+    std::fill_n(mp_c, -1.0, dcount);
 
     // co-moments contain comparison between index 0 and index minsep....subcount
  
