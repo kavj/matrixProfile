@@ -251,18 +251,19 @@ static inline void pearson_edge(
 
    int dcount = rcount - rbegin;
 
-   for (int r = 0; r < rcount; ++r){
+   for (int r = rbegin; r < rcount; ++r){
       for (int d = 0; d < dcount - r; ++d){
+	 int k = r + d;
          if (r != 0){
-            cov[d] -= dr_bwd[r - 1] * dc_bwd[d - 1];
-            cov[d] += dr_fwd[r - 1] * dc_fwd[d - 1];
+            cov[d] -= dr_bwd[r - 1] * dc_bwd[k - 1];
+            cov[d] += dr_fwd[r - 1] * dc_fwd[k - 1];
          }
-         double cr = cov[d] * invnr[r] * invnc[d];
+         double cr = cov[d] * invnr[r] * invnc[k];
          if (mpr[r] < cr){
             mpr[r] = cr;
          }
-         if (mpc[d] < cr){
-            mpc[d] = cr;
+         if (mpc[k] < cr){
+            mpc[k] = cr;
          }
       }
    }

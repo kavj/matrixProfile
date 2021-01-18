@@ -30,8 +30,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray* prhs[] ){
     double* mp_r = mxGetDoubles(mp_r_);
     double* mp_c = mxGetDoubles(mp_c_);
 
-    std::fill_n(mp_r, -1.0, dcount);
-    std::fill_n(mp_c, -1.0, dcount);
+    std::fill(mp_r, mp_r+dcount, -1.0);
+    std::fill(mp_c, mp_c+dcount, -1.0);
 
     // co-moments contain comparison between index 0 and index minsep....subcount
 
