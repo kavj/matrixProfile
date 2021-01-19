@@ -274,20 +274,22 @@ static inline void pearson_edge(
         double* __restrict invnr,
         double* __restrict invnc,
         int rbegin,
-        int rcount){
+        int dcount){
     
-    int dcount = rcount - rbegin;
-    
-    for (int r = rbegin; r < rcount; ++r){
-        for (int d = 0; d < dcount - (r - rbegin); ++d){
-            int k = r + d;
-            if (r != 0){
-                cov[d] -= dr_bwd[r - 1] * dc_bwd[k - 1];
-                cov[d] += dr_fwd[r - 1] * dc_fwd[k - 1];
+    for (int r = 0; r < dcount; ++r){
+        for (int d = 0; d < dcount - r; ++d){
+            int j = r + rbegin;
+	    int k = j + d;
+	    if (j != 0){
+		// This has to increment if cov was not initialized at this point
+		// It previously used a leading zero, but that doesn't work if tiling
+		// is involved.
+                cov[d] -= dr_bwd[j - 1] * dc_bwd[k - 1];
+                cov[d] += dr_fwd[j - 1] * dc_fwd[k - 1];
             }
-            double cr = cov[d] * invnr[r] * invnc[k];
-            if (mpr[r] < cr){
-                mpr[r] = cr;
+            double cr = cov[d] * invnr[j] * invnc[k];
+            if (mpr[j] < cr){
+                mpr[j] = cr;
             }
             if (mpc[k] < cr){
                 mpc[k] = cr;
@@ -342,19 +344,18 @@ void compute_self_mp(double* __restrict cv,
         int dcount){
     
     constexpr int stride = 32;
-    int edgect = dcount % stride;
     int stridect = dcount / stride;
     for(int s = 0; s < stridect; ++s){
         // Compute the number of steps over which we can advance cv[i]...cv[i+stride-1], endpoints included
         int d = s * stride; 
         int full = dcount - d - (stride - 1);
         pearson_inner(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dc_fwd + d, invnr, invnc + d, full);
-        
         pearson_edge(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dc_fwd + d, invnr, invnc + d, full, dcount - d - full);
         
     }
+    int d = stridect * stride;
+    int edgect = dcount - d;
     if(edgect != 0){
-        int d = stridect * stride;
-        pearson_edge(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dr_fwd + d, invnr, invnc + d, 0, dcount - d);
+        pearson_edge(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dr_fwd + d, invnr, invnc + d, 0, edgect);
     }
 }
