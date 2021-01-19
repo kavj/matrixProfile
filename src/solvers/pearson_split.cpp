@@ -224,7 +224,7 @@ static inline void pearson_inner(
      This will actually tell you if accumulation failed somewhere.
     
      */
-    /*
+    
     _mm256_store_pd(cv, c0);
     _mm256_store_pd(cv + 4, c1);
     _mm256_store_pd(cv + 8, c2);
@@ -232,7 +232,7 @@ static inline void pearson_inner(
     _mm256_store_pd(cv + 16, c4);
     _mm256_store_pd(cv + 20, c5);
     _mm256_store_pd(cv + 24, c6);
-    _mm256_store_pd(cv + 28, c7);*/
+    _mm256_store_pd(cv + 28, c7);
 }
 
 /*
@@ -350,11 +350,11 @@ void compute_self_mp(double* __restrict cv,
         int full = dcount - d - (stride - 1);
         pearson_inner(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dc_fwd + d, invnr, invnc + d, full);
         
-        pearson_edge(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dc_fwd + d, invnr, invnc + d, full, dcount - d);
+        pearson_edge(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dc_fwd + d, invnr, invnc + d, full, dcount - d - full);
         
     }
     if(edgect != 0){
         int d = stridect * stride;
-        pearson_edge(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dr_fwd + d, invnr, invnc + d, d, dcount - d);
+        pearson_edge(cv + d, mpr, mpc + d, dr_bwd, dc_bwd + d, dr_fwd, dr_fwd + d, invnr, invnc + d, 0, dcount - d);
     }
 }
