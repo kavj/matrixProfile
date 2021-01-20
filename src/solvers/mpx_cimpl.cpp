@@ -48,8 +48,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray* prhs[] ){
     long long mprct = mxGetNumberOfElements(mp_r_);
     long long mpcct = mxGetNumberOfElements(mp_c_);
 
-    //mpx_ref(mp_r, mp_c, cv, dr_bwd, dc_bwd, dr_fwd, dc_fwd, invn_r, invn_c, dcount);
-    mexPrintf("dcount:%d rbwd:%d cbwd:%d rfwd:%d cfwd:%d invnrct:%d invncct:%d mprct:%d mpcct%d\n", dcount, rbct, cbct, rfct, cfct, invnrct, invncct, mprct, mpcct);
     
     // Buffers from Matlab are supposed to be read only, so allocate another here, this can be allocated as an output
     // buffer instead if you wish to test the output for divergent calculations.
